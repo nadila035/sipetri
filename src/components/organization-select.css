@@ -1,0 +1,15 @@
+.organization-controls > .organization-select { min-width: 0; }
+.organization-select { position: relative; display: grid; align-content: start; gap: 5px; }
+#root .app-shell :is(.report-page, .target-page) .organization-select .organization-select-label { color: #475569; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600; line-height: 1.35; }
+.organization-select-control { position: relative; min-width: 0; }
+#root .app-shell :is(.report-page, .target-page) .organization-select-control input { width: 100%; min-width: 0; height: 32px; padding: 0 26px 0 8px; border: 1px solid #dfe4eb; border-radius: 6px; color: #1e293b; background: #fff; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 400; line-height: 1.35; text-overflow: ellipsis; }
+#root .app-shell :is(.report-page, .target-page) .organization-select-control input:disabled { cursor: not-allowed; color: #475569; background: #f1f5f9; border-color: #d6dde8; font-weight: 600; }
+.organization-select-control:has(input:disabled) .organization-select-arrow { opacity: 0.35; }
+.organization-select-control input:focus { outline: 0; border-color: #4d7ed3; box-shadow: 0 0 0 2px #e8f0fd; }
+.organization-select-control input::placeholder { color: #526176; font-family: 'DM Sans', sans-serif; font-weight: 400; }
+.organization-select-arrow { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #344158; pointer-events: none; }
+.organization-select-panel { position: absolute; z-index: 30; top: 100%; left: 0; right: 0; margin-top: 5px; border: 1px solid #8e98a9; border-radius: 6px; background: #fff; box-shadow: 0 4px 12px #28395318; }
+.organization-select-panel ul { max-height: 240px; max-height: min(240px, 40dvh); overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 4px; list-style: none; scrollbar-width: thin; }
+#root .app-shell :is(.report-page, .target-page) .organization-select-panel li { padding: 9px 8px; border-radius: 3px; color: #1e293b; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 400; line-height: 1.4; overflow-wrap: anywhere; cursor: pointer; }
+.organization-select-panel li[data-active="true"], .organization-select-panel li:hover { color: #1e293b; background: #eaf2ff; outline: 1px solid #2864ca; outline-offset: -1px; }
+#root .app-shell :is(.report-page, .target-page) .organization-select-empty { padding: 12px; color: #526176; font-family: 'DM Sans', sans-serif; font-size: 12.5px; font-weight: 400; }
