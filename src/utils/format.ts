@@ -51,8 +51,8 @@ export const formatBulanPelaksanaan = (
   return `${startObj.month} ${startObj.year} – ${endObj.month} ${endObj.year}`
 }
 
-import type { HistoryRecord } from "../types"
-import { formatStageWithTargetTime } from "./drafts"
+import type { HistoryRecord } from "../types/index.ts"
+import { formatStageWithTargetTime } from "./drafts.ts"
 
 export type TriwulanDisplaySasaran = {
   id: string
@@ -176,25 +176,25 @@ export function getTriwulanData(
   return progsList.length > 0
     ? progsList
     : [
-        {
-          id: "prog-1",
-          program: "-",
-          sasaranList: [
-            {
-              id: "sas-1",
-              target: "-",
-              month: "-",
-              stage: "-",
-              realization: "-",
-              percentage: "0%",
-              obstacle: "-",
-              solution: "-",
-              solutionTime: "-",
-              notes: "-",
-              evidence: "-",
-              baseIdx: 0,
-            },
-          ],
-        },
-      ]
+      {
+        id: "prog-1",
+        program: "-",
+        sasaranList: [
+          {
+            id: "sas-1",
+            target: "-",
+            month: "-",
+            stage: "-",
+            realization: "-",
+            percentage: "0%",
+            obstacle: "-",
+            solution: "-",
+            solutionTime: "-",
+            notes: "-",
+            evidence: "-",
+            baseIdx: 0,
+          },
+        ],
+      },
+    ]
 }

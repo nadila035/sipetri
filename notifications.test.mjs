@@ -126,14 +126,14 @@ test("buildPeriodNotification detects open, lock, extension, update, and ignores
   assert.equal(locked?.targetMenu, "Isi Sasaran Kinerja")
 
   const extended = buildPeriodNotification({
-    previousPeriod: { startDate: "", deadline: "2026-11-20", open: true },
-    nextPeriod: { startDate: "", deadline: "2026-11-30", open: true },
+    previousPeriod: { startDate: "", deadline: "2099-11-20", open: true },
+    nextPeriod: { startDate: "", deadline: "2099-11-30", open: true },
     slotLabel: "Triwulan III",
-    year: "2026",
+    year: "2099",
     isAnnual: false,
   })
   assert.equal(extended?.category, "period_opened")
-  assert.equal(extended?.title, "Triwulan III (2026)")
+  assert.equal(extended?.title, "Triwulan III (2099)")
   assert.match(extended?.message ?? "", /diperpanjang/i)
 
   const unchanged = buildPeriodNotification({

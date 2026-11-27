@@ -90,7 +90,7 @@ export function InputSasaranKinerja({
     useState<HistoryRecord | null>(null)
   const [confirmInfo, setConfirmInfo] = useState<SubmitConfirmInfo | null>(null)
   const [successInfo, setSuccessInfo] = useState<SubmitSuccessInfo | null>(null)
-  const [draftYear, setDraftYear] = useState<string>(
+  const [draftYear, setDraftYearState] = useState<string>(
     () => resumeRecord?.period.match(/\b\d{4}\b/)?.[0] ?? data.year,
   )
   const yearOptions = Array.from(
@@ -121,19 +121,24 @@ export function InputSasaranKinerja({
         : unitOptions[unit]
       : []
 
-  const stateRef = useRef({ criteria, unit, subUnit })
-  stateRef.current = { criteria, unit, subUnit }
+  const stateRef = useRef({ criteria, draftYear, unit, subUnit })
+  stateRef.current = { criteria, draftYear, unit, subUnit }
 
   const buildDraft = (
     draftId: string,
-    snapshot: { criteria: CriteriaItem[]; unit: string; subUnit: string },
+    snapshot: {
+      criteria: CriteriaItem[]
+      draftYear: string
+      unit: string
+      subUnit: string
+    },
     nowIso: string,
   ): HistoryRecord => ({
     id: draftId,
     author: session?.displayName || "Staf Unit",
     type: "Sasaran Kinerja",
-    title: `Sasaran Kinerja Tahun ${draftYear}`,
-    period: `Tahun ${draftYear}`,
+    title: `Sasaran Kinerja Tahun ${snapshot.draftYear}`,
+    period: `Tahun ${snapshot.draftYear}`,
     unit: snapshot.subUnit || snapshot.unit || "Belum diisi",
     parentUnit: snapshot.unit || undefined,
     subUnit: snapshot.subUnit || snapshot.unit || undefined,
@@ -157,6 +162,13 @@ export function InputSasaranKinerja({
         buildDraft(activeDraftId, nextSnapshot, nowIso),
       ),
     }))
+  }
+
+  const setDraftYear = (nextYear: string) => {
+    const nextSnapshot = { ...stateRef.current, draftYear: nextYear }
+    stateRef.current = nextSnapshot
+    setDraftYearState(nextYear)
+    syncAutosave(nextSnapshot)
   }
 
   const setCriteria = (update: SetStateAction<CriteriaItem[]>) => {
@@ -522,7 +534,11 @@ export function InputSasaranKinerja({
       activeDraftId ??
       `DRAF-SK-${draftYear}-${crypto.randomUUID().slice(0, 8)}`
     const nowIso = new Date().toISOString()
-    const draftRecord = buildDraft(draftId, { criteria, unit, subUnit }, nowIso)
+    const draftRecord = buildDraft(
+      draftId,
+      { criteria, draftYear, unit, subUnit },
+      nowIso,
+    )
     setData((current) => ({
       ...current,
       records: upsertDraftRecord(current.records, draftRecord),
@@ -638,7 +654,7 @@ export function InputSasaranKinerja({
       notifications: appendNotifications(current.notifications, adminNotif),
     }))
     const fresh = [newCriteria()]
-    stateRef.current = { criteria: fresh, unit: "", subUnit: "" }
+    stateRef.current = { criteria: fresh, draftYear, unit: "", subUnit: "" }
     setUnitState("")
     setSubUnitState("")
     setCriteriaState(fresh)
@@ -678,7 +694,7 @@ export function InputSasaranKinerja({
   const previewRecord = previewOpen
     ? buildDraft(
       activeDraftId ?? "PRATINJAU-SEMENTARA",
-      { criteria, unit, subUnit },
+      { criteria, draftYear, unit, subUnit },
       lastModifiedAt,
     )
     : null
@@ -726,11 +742,7 @@ export function InputSasaranKinerja({
                   name="draftYear"
                   aria-label="Tahun sasaran kinerja"
                   value={draftYear}
-                  disabled={activeDraftId !== null}
-                  onChange={(e) => {
-                    setDraftYear(e.target.value)
-                    setLastModifiedAt(new Date().toISOString())
-                  }}
+                  onChange={(e) => setDraftYear(e.target.value)}
                 >
                   {yearOptions.map((y) => {
                     const yState = getPeriodState(data.periods[`${y}-annual`])

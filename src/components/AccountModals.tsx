@@ -1,9 +1,17 @@
-import { useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useDialog } from "../utils/useDialog"
 import type { AuthSession } from "../types"
 import { getUserInitials } from "../utils/auth"
 import { PORTAL_INSTITUTION } from "../pages/portalContent"
+import {
+  filterSopChapters,
+  getAllowedWorkspaceSopRoles,
+  getSopSpec,
+  type SopRole,
+} from "../data/sopContent"
 import { Icon } from "./Icon"
+import { SopPrintPreviewModal } from "./SopPrintPreviewModal"
+import "./sop-guide.css"
 
 export function AccountInfoModal({
   open,
@@ -94,219 +102,361 @@ export function HelpGuideModal({
   role: AuthSession["role"]
   onClose: () => void
 }) {
-  const [activeTab, setActiveTab] = useState<"alur" | "aturan" | "kendala">(
-    "alur",
+  const allowedRoles = getAllowedWorkspaceSopRoles(role)
+  const effectiveRole: SopRole = allowedRoles[0]
+
+  const [searchQuery, setSearchQuery] = useState("")
+  const [activeChapterId, setActiveChapterId] = useState<string>("")
+  const [printOpen, setPrintOpen] = useState(false)
+  const readerRef = useRef<HTMLDivElement>(null)
+
+  const spec = getSopSpec(effectiveRole)
+
+  const visibleChapters = useMemo(
+    () => filterSopChapters(spec.chapters, searchQuery),
+    [spec.chapters, searchQuery],
   )
-  useDialog(open, onClose, ".help-guide-overlay")
+
+  useEffect(() => {
+    if (!open) {
+      setPrintOpen(false)
+      return
+    }
+    setSearchQuery("")
+    const nextSpec = getSopSpec(effectiveRole)
+    setActiveChapterId(nextSpec.chapters[0]?.id ?? "")
+    if (readerRef.current) {
+      readerRef.current.scrollTop = 0
+    }
+  }, [open, effectiveRole])
+
+  useDialog(open, onClose, ".sop-guide-overlay")
   if (!open) return null
 
-  const workflowSteps =
-    role === "admin"
-      ? [
-          {
-            title: "1. Pemantauan Kepatuhan 42 Unit",
-            detail:
-              "Buka Dashboard Monitoring untuk melihat metrik Wajib Lapor, Sudah Mengirim, Belum Melapor, Pelapor Disetujui, matriks TW I sampai IV, dan panel Perlu Tindak Lanjut.",
-          },
-          {
-            title: "2. Verifikasi & Catatan Revisi per Sel",
-            detail:
-              "Buka Verifikasi Laporan Triwulan atau Verifikasi Sasaran Kinerja. Klik ikon catatan pada sel tabel untuk memberi catatan perbaikan (wajib minimal 1 catatan sebelum klik Kirim Revisi) atau klik Setujui Dokumen.",
-          },
-          {
-            title: "3. Pengaturan Periode & Tenggat Waktu (WIB)",
-            detail:
-              "Di menu Periode dan Tenggat Waktu, tambah tahun pelaporan, atur periode default beranda staf, nyalakan atau kunci sakelar akses periode, dan tetapkan tanggal mulai (00:00 WIB) hingga tenggat (23:59 WIB). Perubahan jadwal otomatis memberi notifikasi ke unit.",
-          },
-          {
-            title: "4. Siaran Pengingat Realtime (1 Arah)",
-            detail:
-              "Klik tombol ikon siaran berwarna biru di sebelah ikon lonceng topbar (atau tombol Ingatkan di Perlu Tindak Lanjut) untuk mengirim pengingat cepat berbasis template ke semua unit, unit belum melapor, unit revisi, atau unit tertentu serta memantau status Sudah dibaca.",
-          },
-          {
-            title: "5. Arsip, Pratinjau Resmi, & Rekap Excel",
-            detail:
-              "Gunakan Arsip dan Rekapitulasi untuk memfilter riwayat lintas tahun dan unit, membuka Pratinjau Cetak resmi, atau menekan Unduh Rekap Excel.",
-          },
-        ]
-      : [
-          {
-            title: "1. Pilih Unit & Susun Sasaran Kinerja Tahunan",
-            detail:
-              "Masuk ke menu Isi Sasaran Kinerja, pilih Unit Utama dan Sub Unit / Bagian dari daftar 42 unit kerja, lalu lengkapi Kriteria, Strategi, Program Kerja, Sasaran, Bulan Mulai/Selesai, dan Keterangan.",
-          },
-          {
-            title: "2. Isi Laporan Realisasi Triwulan atau Impor Sasaran",
-            detail:
-              "Di menu Isi Laporan Triwulan, Anda dapat mengisi langsung atau mengimpor program dari Sasaran Kinerja tahun berjalan (bisa diimpor meski dokumen tahunan masih berstatus Menunggu). Lengkapi Tahap Pelaksanaan, Realisasi, Persentase, dan tautan Bukti Dukung.",
-          },
-          {
-            title: "3. Simpan Draf Otomatis, Pratinjau, & Kirim",
-            detail:
-              "Simpan Draf untuk mengaktifkan simpan otomatis lokal di browser (gunakan 1 tab saat mengedit). Gunakan Pratinjau atau Pratinjau Cetak A4 Landscape untuk memeriksa isian sebelum menekan Kirim Laporan ke antrean Admin PRP.",
-          },
-          {
-            title: "4. Pantau Notifikasi & Perbaiki Revisi",
-            detail:
-              "Buka lonceng notifikasi di topbar untuk melihat hasil verifikasi dan pengingat dari Admin PRP. Pada pengingat 1 arah, klik Buka menu tujuan atau Tandai dibaca. Jika ada dokumen berstatus Revisi, buka Riwayat lalu klik Perbaiki selama periode masih dibuka.",
-          },
-        ]
+  const jumpToChapter = (chapterId: string) => {
+    setActiveChapterId(chapterId)
+    const target = document.getElementById(`sop-card-${chapterId}`)
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }
 
-  const rulesList = [
-    {
-      title: "Batas Waktu Kalender Asia/Jakarta (WIB)",
-      detail:
-        "Seluruh jadwal mulai dan tenggat akhir dihitung menurut WIB (UTC+07:00). Pengiriman dokumen baru dibuka hingga pukul 23:59:59 WIB pada tanggal tenggat. Bila periode dikunci atau sudah melewati tenggat, pengiriman baru dan perbaikan revisi otomatis ditahan hingga Admin memperpanjang tenggat.",
-    },
-    {
-      title: "Aturan Wajib Realisasi di Bawah 100%",
-      detail:
-        "Pada formulir Laporan Triwulan, setiap sasaran yang persentase realisasinya kurang dari 100% wajib melengkapi kolom Kendala, Rencana Penyelesaian, dan Waktu Penyelesaian sebelum dokumen dapat dikirim.",
-    },
-    {
-      title: "Arti Status Dokumen",
-      detail:
-        "Draf berarti masih tersimpan lokal dan belum dikirim ke Admin. Menunggu berarti sudah masuk antrean verifikasi Admin PRP. Revisi berarti perlu perbaikan sesuai catatan indikator dari verifikator. Disetujui berarti dokumen telah final dan terarsip.",
-    },
-    {
-      title: "Prioritas Pengingat Realtime Admin (1 Arah)",
-      detail:
-        "Mendesak menampilkan banner merah di halaman staf dan notifikasi instan. Penting menampilkan banner kuning dan notifikasi instan. Informasi Umum masuk ke lonceng notifikasi dan pemberitahuan singkat. Staf hanya membaca dan menekan Tandai dibaca tanpa kolom balas.",
-    },
-  ]
-
-  const troubleshootingList =
-    role === "admin"
-      ? [
-          {
-            title: "Staf Melapor Tidak Bisa Mengirim atau Mengirim Ulang Revisi",
-            detail:
-              "Periksa menu Periode dan Tenggat Waktu pada tahun dan triwulan terkait. Pastikan sakelar periode berstatus Dibuka dan tanggal tenggat belum terlewati menurut waktu WIB.",
-          },
-          {
-            title: "Perubahan Pengingat atau Data Tidak Muncul di Tab Lain",
-            detail:
-              "Pastikan kedua tab dibuka pada alamat dan browser yang sama tanpa mode privat yang memblokir penyimpanan lokal. Untuk sinkronisasi antarperangkat berbeda, sistem perlu dihubungkan ke backend API.",
-          },
-          {
-            title: "Data Tersimpan Gagal Dibaca atau Kuota Browser Penuh",
-            detail:
-              "Jika muncul peringatan penyimpanan browser, jangan hapus data sebelum mengekspor arsip penting ke Excel atau mencetak PDF lewat Pratinjau Cetak, lalu kosongkan sisa ruang penyimpanan browser.",
-          },
-        ]
-      : [
-          {
-            title: "Tombol Kirim atau Perbaiki Revisi Terkunci",
-            detail:
-              "Pengiriman baru dan kirim ulang revisi hanya aktif saat periode dibuka oleh Admin PRP dan belum melewati pukul 23:59:59 WIB pada tanggal tenggat. Hubungi Admin PRP bila memerlukan perpanjangan jadwal.",
-          },
-          {
-            title: "Tombol Impor Sasaran Kinerja Tidak Menampilkan Program",
-            detail:
-              "Pastikan Unit Utama, Sub Unit, dan Tahun Laporan Triwulan sama persis dengan Sasaran Kinerja Tahunan yang sudah dikirim (bukan yang masih berstatus Draf).",
-          },
-          {
-            title: "Banner Pengingat Mendesak / Penting Terus Tampil",
-            detail:
-              "Banner pengingat dari Admin PRP tetap tampil di atas halaman hingga Anda menekan tombol Tandai dibaca (atau hingga Admin mengarsipkan pengingat tersebut).",
-          },
-          {
-            title: "Gagal Menyimpan Draf di Browser",
-            detail:
-              "Hindari membuka dan menyunting formulir di lebih dari satu tab secara bersamaan, dan pastikan mode peramban mengizinkan penyimpanan lokal (localStorage).",
-          },
-        ]
+  const handleReaderScroll = () => {
+    const container = readerRef.current
+    if (!container || visibleChapters.length === 0) return
+    const containerTop = container.getBoundingClientRect().top
+    let currentId = visibleChapters[0].id
+    for (const ch of visibleChapters) {
+      const card = document.getElementById(`sop-card-${ch.id}`)
+      if (!card) continue
+      const offset = card.getBoundingClientRect().top - containerTop
+      if (offset <= 90) {
+        currentId = ch.id
+      }
+    }
+    if (currentId !== activeChapterId) {
+      setActiveChapterId(currentId)
+    }
+  }
 
   return (
-    <div
-      className="submit-success-overlay help-guide-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="help-guide-title"
-    >
-      <div className="submit-success-dialog help-modal-dialog">
-        <div className="help-modal-head">
-          <div className="submit-confirm-icon" aria-hidden="true">
-            <Icon name="help" size={22} />
-          </div>
-          <div className="help-modal-title-wrap">
-            <h2 id="help-guide-title">Pusat Bantuan SIPETRI</h2>
-            <p>
-              {role === "admin"
-                ? "Panduan pemantauan, verifikasi dokumen, pengaturan jadwal, dan siaran pengingat untuk Admin PRP."
-                : "Panduan pengisian sasaran kinerja, laporan triwulan, perbaikan revisi, dan notifikasi unit."}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="help-modal-close"
-            aria-label="Tutup panduan bantuan"
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </div>
+    <>
+      <div
+        className="sop-guide-overlay help-guide-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sop-guide-title"
+      >
+        <div className="sop-guide-dialog">
+          <header className="sop-guide-head">
+            <div className="sop-guide-head-main">
+              <div className="sop-guide-head-icon" aria-hidden="true">
+                <Icon name="help" size={22} />
+              </div>
+              <div className="sop-guide-head-copy">
+                <div className="sop-guide-kicker-row">
+                  <span
+                    className={`sop-guide-role-pill${effectiveRole === "admin" ? " is-admin" : ""}`}
+                  >
+                    {spec.roleBadge}
+                  </span>
+                  <span className="sop-guide-doc-meta">
+                    {spec.docCode} · {spec.scopeSummary}
+                  </span>
+                </div>
+                <h2 id="sop-guide-title">{spec.title}</h2>
+                <p>{spec.subtitle}</p>
+              </div>
+            </div>
 
-        <div
-          className="help-guide-tabs"
-          role="tablist"
-          aria-label="Kategori panduan bantuan"
-        >
-          {(
-            [
-              { key: "alur", label: "Alur Kerja" },
-              { key: "aturan", label: "Aturan & Status" },
-              { key: "kendala", label: "Kendala & Kontak" },
-            ] as const
-          ).map((tabItem) => (
-            <button
-              key={tabItem.key}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tabItem.key}
-              className={activeTab === tabItem.key ? "is-active" : ""}
-              onClick={() => setActiveTab(tabItem.key)}
+            <div className="sop-guide-head-right">
+              <button
+                type="button"
+                className="sop-guide-close"
+                aria-label="Tutup panduan SOP"
+                onClick={onClose}
+              >
+                ×
+              </button>
+            </div>
+          </header>
+
+          <div className="sop-guide-toolbar">
+            <div className="sop-search-box">
+              <span className="sop-search-icon" aria-hidden="true">
+                <Icon name="search" size={16} />
+              </span>
+              <input
+                id="sop-guide-search-input"
+                name="sop-search"
+                type="search"
+                aria-label={`Cari materi di dalam ${spec.shortLabel}`}
+                placeholder={`Cari langkah, nama menu, aturan, atau kendala (${spec.shortLabel})...`}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  className="sop-search-clear"
+                  aria-label="Bersihkan kata kunci pencarian SOP"
+                  onClick={() => setSearchQuery("")}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            <div className="sop-pdf-actions">
+              <button
+                type="button"
+                className="sop-pdf-btn is-primary"
+                onClick={() => setPrintOpen(true)}
+              >
+                <Icon name="download" size={15} />
+                <span>Cetak / Simpan {spec.shortLabel} (PDF)</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="sop-guide-workspace">
+            <nav
+              className="sop-toc-rail"
+              aria-label={`Daftar bab ${spec.shortLabel}`}
             >
-              {tabItem.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="help-modal-body">
-          {activeTab === "alur" && (
-            <ol className="help-guide-list">
-              {workflowSteps.map((step) => (
-                <li key={step.title}>
-                  <strong>{step.title}</strong>
-                  <p>{step.detail}</p>
+              <span className="sop-toc-heading">
+                Daftar Isi ({visibleChapters.length}/{spec.chapters.length} Bab)
+              </span>
+              <ul className="sop-toc-list">
+                {visibleChapters.map((chapter) => {
+                  const isCurrent =
+                    activeChapterId === chapter.id ||
+                    (!visibleChapters.some((c) => c.id === activeChapterId) &&
+                      visibleChapters[0]?.id === chapter.id)
+                  return (
+                    <li key={chapter.id}>
+                      <button
+                        type="button"
+                        className={`sop-toc-btn${isCurrent ? " is-active" : ""}`}
+                        onClick={() => jumpToChapter(chapter.id)}
+                      >
+                        <span className="sop-toc-num">{chapter.number}</span>
+                        <span className="sop-toc-title">{chapter.title}</span>
+                      </button>
+                    </li>
+                  )
+                })}
+                <li>
+                  <button
+                    type="button"
+                    className={`sop-toc-btn${activeChapterId === "sop-kontak-prp" ? " is-active" : ""}`}
+                    onClick={() => jumpToChapter("sop-kontak-prp")}
+                  >
+                    <span className="sop-toc-num">Kontak</span>
+                    <span className="sop-toc-title">
+                      Layanan Bantuan PRP ITPLN
+                    </span>
+                  </button>
                 </li>
-              ))}
-            </ol>
-          )}
-
-          {activeTab === "aturan" && (
-            <ul className="help-guide-list">
-              {rulesList.map((item) => (
-                <li key={item.title}>
-                  <strong>{item.title}</strong>
-                  <p>{item.detail}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {activeTab === "kendala" && (
-            <div className="help-trouble-wrap">
-              <ul className="help-guide-list">
-                {troubleshootingList.map((item) => (
-                  <li key={item.title}>
-                    <strong>{item.title}</strong>
-                    <p>{item.detail}</p>
-                  </li>
-                ))}
               </ul>
-              <div className="help-contact-box">
-                <strong>Kontak Pengelola Institusi</strong>
+            </nav>
+
+            <div
+              ref={readerRef}
+              className="sop-reader-pane"
+              onScroll={handleReaderScroll}
+            >
+              {visibleChapters.length === 0 ? (
+                <div className="sop-empty-search" role="status">
+                  <Icon name="search" size={24} />
+                  <strong>
+                    Topik "{searchQuery}" tidak ditemukan pada {spec.shortLabel}
+                  </strong>
+                  <p>
+                    Gunakan kata kunci lain seperti "Revisi", "100%", "WIB",
+                    "Impor", atau tampilkan kembali seluruh bab.
+                  </p>
+                  <button
+                    type="button"
+                    className="sop-pdf-btn is-primary"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    Tampilkan Semua Bab
+                  </button>
+                </div>
+              ) : (
+                visibleChapters.map((chapter) => (
+                  <article
+                    key={chapter.id}
+                    id={`sop-card-${chapter.id}`}
+                    className="sop-chapter-card"
+                  >
+                    <header className="sop-chapter-head">
+                      <span className="sop-chapter-badge">{chapter.number}</span>
+                      <div className="sop-chapter-title-wrap">
+                        <h3>{chapter.title}</h3>
+                        <span className="sop-chapter-menu-ref">
+                          {chapter.menuRef}
+                        </span>
+                      </div>
+                    </header>
+
+                    <div className="sop-chapter-body">
+                      <section className="sop-section-block">
+                        <h4 className="sop-section-label">Tujuan Singkat</h4>
+                        <p className="sop-purpose-text">{chapter.purpose}</p>
+                      </section>
+
+                      <section className="sop-section-block">
+                        <h4 className="sop-section-label">Langkah Kerja</h4>
+                        <ol className="sop-steps-list">
+                          {chapter.steps.map((step, index) => (
+                            <li key={index}>
+                              <span
+                                className="sop-step-index"
+                                aria-hidden="true"
+                              >
+                                {index + 1}
+                              </span>
+                              <span>{step}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </section>
+
+                      {chapter.statusTable && (
+                        <section className="sop-section-block">
+                          <h4 className="sop-section-label">
+                            Tabel Arti 4 Status Dokumen
+                          </h4>
+                          <div className="sop-ref-table-wrap">
+                            <table className="sop-ref-table">
+                              <thead>
+                                <tr>
+                                  <th>Status</th>
+                                  <th>Arti Status di Sistem</th>
+                                  <th>Tindakan Staf Unit</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {chapter.statusTable.map((row) => (
+                                  <tr key={row.status}>
+                                    <td>
+                                      <span
+                                        className={`sop-status-pill is-${row.badgeTone}`}
+                                      >
+                                        {row.status}
+                                      </span>
+                                    </td>
+                                    <td>{row.meaning}</td>
+                                    <td>{row.action}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      )}
+
+                      {chapter.exportTable && (
+                        <section className="sop-section-block">
+                          <h4 className="sop-section-label">
+                            Panduan Memilih Jenis Unduhan Rekap Master
+                          </h4>
+                          <div className="sop-ref-table-wrap">
+                            <table className="sop-ref-table">
+                              <thead>
+                                <tr>
+                                  <th>Jenis Unduhan</th>
+                                  <th>Format</th>
+                                  <th>Kegunaan Utama</th>
+                                  <th>Cakupan Isi Berkas</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {chapter.exportTable.map((row) => (
+                                  <tr key={row.extension}>
+                                    <td>
+                                      <strong>{row.label}</strong>
+                                    </td>
+                                    <td>
+                                      <span className="sop-ext-pill">
+                                        {row.extension}
+                                      </span>
+                                    </td>
+                                    <td>{row.purpose}</td>
+                                    <td>{row.contents}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </section>
+                      )}
+
+                      <aside
+                        className="sop-mandatory-callout"
+                        aria-label={chapter.mandatoryTitle}
+                      >
+                        <div className="sop-mandatory-head">
+                          <span
+                            className="sop-mandatory-mark"
+                            aria-hidden="true"
+                          >
+                            !
+                          </span>
+                          <h4>{chapter.mandatoryTitle}</h4>
+                        </div>
+                        <ul className="sop-mandatory-list">
+                          {chapter.mandatoryRules.map((rule, idx) => (
+                            <li key={idx}>{rule}</li>
+                          ))}
+                        </ul>
+                      </aside>
+
+                      <section className="sop-section-block">
+                        <h4 className="sop-section-label">
+                          Cara Mengatasi Kendala
+                        </h4>
+                        <div className="sop-fixes-grid">
+                          {chapter.quickFixes.map((item, idx) => (
+                            <div className="sop-fix-item" key={idx}>
+                              <strong>Kendala: {item.issue}</strong>
+                              <p>Solusi: {item.fix}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    </div>
+                  </article>
+                ))
+              )}
+
+              <section
+                id="sop-card-sop-kontak-prp"
+                className="help-contact-box"
+              >
+                <strong>Kontak Pengelola Resmi SIPETRI</strong>
                 <p>
                   {PORTAL_INSTITUTION.unitManager} ·{" "}
                   {PORTAL_INSTITUTION.institution}
@@ -314,27 +464,41 @@ export function HelpGuideModal({
                 <div className="help-contact-links">
                   <span>Email: {PORTAL_INSTITUTION.email}</span>
                   <span>Telepon: {PORTAL_INSTITUTION.phoneDisplay}</span>
+                  <span>Lokasi: {PORTAL_INSTITUTION.address}</span>
                 </div>
-              </div>
+              </section>
             </div>
-          )}
+          </div>
+
+          <footer className="sop-guide-footer">
+            <span className="sop-guide-footer-meta">
+              {PORTAL_INSTITUTION.shortName} ITPLN ·{" "}
+              {PORTAL_INSTITUTION.version} · Tekan Esc untuk menutup
+            </span>
+            <div className="sop-guide-footer-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={onClose}
+              >
+                Tutup Panduan
+              </button>
+            </div>
+          </footer>
         </div>
 
-        <div className="help-guide-footer">
-          <span>
-            {PORTAL_INSTITUTION.shortName} ITPLN · {PORTAL_INSTITUTION.version}
-          </span>
-          <button type="button" className="primary-button" onClick={onClose}>
-            Tutup
-          </button>
-        </div>
+        <button
+          type="button"
+          className="overlay-close"
+          aria-label="Tutup panduan SOP"
+          onClick={onClose}
+        />
       </div>
-      <button
-        type="button"
-        className="overlay-close"
-        aria-label="Tutup panduan bantuan"
-        onClick={onClose}
+
+      <SopPrintPreviewModal
+        role={printOpen ? effectiveRole : null}
+        onClose={() => setPrintOpen(false)}
       />
-    </div>
+    </>
   )
 }

@@ -29,7 +29,11 @@ import {
   createAppNotification,
   formatRecordUnitLabel,
 } from "../utils/notifications"
-import { exportArchiveRecapExcel } from "../utils/exportExcel"
+import {
+  exportArchiveMasterXlsx,
+  exportArchiveRecapExcel,
+  exportArchiveUnitZip,
+} from "../utils/exportExcel"
 import { formatBulanPelaksanaan, getTriwulanData } from "../utils/format"
 import { useDialog } from "../utils/useDialog"
 
@@ -105,6 +109,8 @@ export function Admin({
 
   const [preview, setPreview] = useState<HistoryRecord | null>(null)
   const [detailRecord, setDetailRecord] = useState<HistoryRecord | null>(null)
+  const [masterExportOpen, setMasterExportOpen] = useState(false)
+  const masterExportRef = useRef<HTMLDivElement>(null)
 
   const [prevActive, setPrevActive] = useState(active)
   if (prevActive !== active) {
@@ -114,7 +120,31 @@ export function Admin({
     setNotes({})
     setActiveNoteIndex(null)
     setReviewReturnTarget("page")
+    setMasterExportOpen(false)
   }
+
+  useEffect(() => {
+    if (!masterExportOpen) return
+    const handleOutside = (event: MouseEvent) => {
+      if (
+        event.target instanceof Node &&
+        !masterExportRef.current?.contains(event.target)
+      ) {
+        setMasterExportOpen(false)
+      }
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMasterExportOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleOutside)
+    document.addEventListener("keydown", handleKey)
+    return () => {
+      document.removeEventListener("mousedown", handleOutside)
+      document.removeEventListener("keydown", handleKey)
+    }
+  }, [masterExportOpen])
 
   const [lastRecordSeq, setLastRecordSeq] = useState(0)
   if (openRecordRequest && openRecordRequest.seq !== lastRecordSeq) {
@@ -877,14 +907,14 @@ export function Admin({
         current.quarter !== activeQuarterInput
       const activeNotif = changed
         ? createAppNotification({
-            recipient: "staff",
-            category: "default_period_changed",
-            title: `Triwulan ${activeQuarterInput} · Tahun ${activeYearInput}`,
-            message: `Periode default beranda staf diarahkan ke jadwal ini.`,
-            actor: `${session?.displayName || "Admin PRP"} (Admin PRP)`,
-            targetMenu: "Dashboard",
-            periodLabel: `Triwulan ${activeQuarterInput} · ${activeYearInput}`,
-          })
+          recipient: "staff",
+          category: "default_period_changed",
+          title: `Triwulan ${activeQuarterInput} · Tahun ${activeYearInput}`,
+          message: `Periode default beranda staf diarahkan ke jadwal ini.`,
+          actor: `${session?.displayName || "Admin PRP"} (Admin PRP)`,
+          targetMenu: "Dashboard",
+          periodLabel: `Triwulan ${activeQuarterInput} · ${activeYearInput}`,
+        })
         : null
       return {
         ...current,
@@ -1047,18 +1077,93 @@ export function Admin({
               </h1>
             </div>
             {active === "Arsip dan Rekapitulasi" && (
-              <button
-                type="button"
-                className="history-help"
-                disabled={queue.length === 0}
-                onClick={() =>
-                  notify(
-                    exportArchiveRecapExcel(queue, year, effectiveQuarter),
-                  )
-                }
-              >
-                <Icon name="download" size={16} /> Unduh Rekap Excel
-              </button>
+              <div className="admin-master-export" ref={masterExportRef}>
+                <button
+                  type="button"
+                  className="admin-master-export-trigger"
+                  disabled={queue.length === 0}
+                  aria-haspopup="menu"
+                  aria-expanded={masterExportOpen}
+                  onClick={() => setMasterExportOpen((prev) => !prev)}
+                >
+                  <Icon name="download" size={16} />
+                  <span>Unduh Rekap Master</span>
+                  <Icon name="chevronDown" size={14} />
+                </button>
+                {masterExportOpen && queue.length > 0 && (
+                  <div
+                    className="admin-master-export-menu"
+                    role="menu"
+                    aria-label="Pilih format unduhan rekap master"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="admin-master-export-item"
+                      onClick={() => {
+                        setMasterExportOpen(false)
+                        notify(
+                          exportArchiveMasterXlsx(
+                            queue,
+                            year,
+                            effectiveQuarter,
+                          ),
+                        )
+                      }}
+                    >
+                      <strong>
+                        <span>Rekap Master Excel</span>
+                        <span className="sop-ext-pill">.xlsx</span>
+                      </strong>
+                      <small>
+                        Olah data multi-sheet & ringkasan kepatuhan 42 unit
+                      </small>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="admin-master-export-item"
+                      onClick={() => {
+                        setMasterExportOpen(false)
+                        notify(
+                          exportArchiveUnitZip(queue, year, effectiveQuarter),
+                        )
+                      }}
+                    >
+                      <strong>
+                        <span>Arsip Paket Unit</span>
+                        <span className="sop-ext-pill">.zip</span>
+                      </strong>
+                      <small>
+                        Simpan dokumen terpisah dalam folder per unit kerja
+                      </small>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className="admin-master-export-item"
+                      onClick={() => {
+                        setMasterExportOpen(false)
+                        notify(
+                          exportArchiveRecapExcel(
+                            queue,
+                            year,
+                            effectiveQuarter,
+                          ),
+                        )
+                      }}
+                    >
+                      <strong>
+                        <span>Ringkasan Daftar Dokumen</span>
+                        <span className="sop-ext-pill">.csv</span>
+                      </strong>
+                      <small>
+                        Tabel cepat daftar status, waktu kirim, & kelengkapan
+                      </small>
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -1747,238 +1852,237 @@ export function Admin({
                 </section>
               </>
             )}
-          {selected &&
-            (() => {
-              const savedRevisionTotal = selected.items.filter(
-                (item) => item.needsRevision || item.note?.trim(),
-              ).length
-              const backLabel =
-                reviewReturnTarget === "detail"
-                  ? "Kembali ke detail dokumen"
-                  : "Kembali ke halaman sebelumnya"
-              const activeNoteItem =
-                activeNoteIndex !== null ? selected.items[activeNoteIndex] : undefined
+            {selected &&
+              (() => {
+                const savedRevisionTotal = selected.items.filter(
+                  (item) => item.needsRevision || item.note?.trim(),
+                ).length
+                const backLabel =
+                  reviewReturnTarget === "detail"
+                    ? "Kembali ke detail dokumen"
+                    : "Kembali ke halaman sebelumnya"
+                const activeNoteItem =
+                  activeNoteIndex !== null ? selected.items[activeNoteIndex] : undefined
 
-              const getCellState = (
-                itemIndex: number,
-                extraNoteIndexes?: number[],
-              ) => {
-                const item = itemIndex >= 0 ? selected.items[itemIndex] : undefined
-                const extraSavedNote = extraNoteIndexes
-                  ?.map((idx) => selected.items[idx]?.note?.trim())
-                  .find(Boolean)
-                const savedNote = item?.note?.trim() || extraSavedNote || ""
-                const draftNote =
-                  itemIndex >= 0 ? (notes[String(itemIndex)] ?? "").trim() : ""
-                const hasSavedRevision = Boolean(item?.needsRevision || savedNote)
-                const isSelectedCell =
-                  canEditReview &&
-                  itemIndex >= 0 &&
-                  Boolean(item) &&
-                  activeNoteIndex === itemIndex
-                const isFlagged = canEditReview
-                  ? Boolean(draftNote)
-                  : hasSavedRevision
+                const getCellState = (
+                  itemIndex: number,
+                  extraNoteIndexes?: number[],
+                ) => {
+                  const item = itemIndex >= 0 ? selected.items[itemIndex] : undefined
+                  const extraSavedNote = extraNoteIndexes
+                    ?.map((idx) => selected.items[idx]?.note?.trim())
+                    .find(Boolean)
+                  const savedNote = item?.note?.trim() || extraSavedNote || ""
+                  const draftNote =
+                    itemIndex >= 0 ? (notes[String(itemIndex)] ?? "").trim() : ""
+                  const hasSavedRevision = Boolean(item?.needsRevision || savedNote)
+                  const isSelectedCell =
+                    canEditReview &&
+                    itemIndex >= 0 &&
+                    Boolean(item) &&
+                    activeNoteIndex === itemIndex
+                  const isFlagged = canEditReview
+                    ? Boolean(draftNote)
+                    : hasSavedRevision
 
-                return {
-                  item,
-                  savedNote,
-                  draftNote,
-                  isSelectedCell,
-                  isFlagged,
-                  tdStateClass: [
-                    isFlagged && "is-flagged",
-                    isSelectedCell && "is-editing-note",
-                  ]
-                    .filter(Boolean)
-                    .join(" "),
+                  return {
+                    item,
+                    savedNote,
+                    draftNote,
+                    isSelectedCell,
+                    isFlagged,
+                    tdStateClass: [
+                      isFlagged && "is-flagged",
+                      isSelectedCell && "is-editing-note",
+                    ]
+                      .filter(Boolean)
+                      .join(" "),
+                  }
                 }
-              }
 
-              const renderReviewCell = (
-                itemIndex: number,
-                displayValue: string,
-                label: string,
-                options?: {
-                  isLink?: boolean
-                  extraNoteIndexes?: number[]
-                  centerText?: boolean
-                },
-              ) => {
-                const state = getCellState(itemIndex, options?.extraNoteIndexes)
-                const canComment =
-                  canEditReview && itemIndex >= 0 && Boolean(state.item)
-                const trimmedVal = displayValue.trim()
-                const isUrl =
-                  Boolean(options?.isLink) && /^https?:\/\/\S+$/i.test(trimmedVal)
+                const renderReviewCell = (
+                  itemIndex: number,
+                  displayValue: string,
+                  label: string,
+                  options?: {
+                    isLink?: boolean
+                    extraNoteIndexes?: number[]
+                    centerText?: boolean
+                  },
+                ) => {
+                  const state = getCellState(itemIndex, options?.extraNoteIndexes)
+                  const canComment =
+                    canEditReview && itemIndex >= 0 && Boolean(state.item)
+                  const trimmedVal = displayValue.trim()
+                  const isUrl =
+                    Boolean(options?.isLink) && /^https?:\/\/\S+$/i.test(trimmedVal)
 
-                return (
-                  <div
-                    className={`admin-review-cell${
-                      options?.centerText ? " is-centered" : ""
-                    }`}
-                  >
-                    <div className="admin-review-cell-main">
-                      {isUrl ? (
-                        <a
-                          href={trimmedVal}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="admin-evidence-link"
-                        >
-                          {trimmedVal}
-                        </a>
-                      ) : (
-                        <p>{trimmedVal || "-"}</p>
-                      )}
-                      {canComment && (
+                  return (
+                    <div
+                      className={`admin-review-cell${options?.centerText ? " is-centered" : ""
+                        }`}
+                    >
+                      <div className="admin-review-cell-main">
+                        {isUrl ? (
+                          <a
+                            href={trimmedVal}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="admin-evidence-link"
+                          >
+                            {trimmedVal}
+                          </a>
+                        ) : (
+                          <p>{trimmedVal || "-"}</p>
+                        )}
+                        {canComment && (
+                          <button
+                            type="button"
+                            className={[
+                              "admin-cell-note-btn",
+                              state.draftNote && "has-note",
+                              state.isSelectedCell && "is-editing",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                            aria-label={
+                              state.draftNote
+                                ? `Ubah catatan revisi untuk ${label}`
+                                : `Tambah catatan revisi untuk ${label}`
+                            }
+                            title={
+                              state.draftNote
+                                ? "Ubah catatan revisi"
+                                : "Beri catatan revisi"
+                            }
+                            aria-pressed={state.isSelectedCell}
+                            onClick={() =>
+                              setActiveNoteIndex((current) =>
+                                current === itemIndex ? null : itemIndex,
+                              )
+                            }
+                          >
+                            <Icon name="note" size={14} />
+                          </button>
+                        )}
+                      </div>
+                      {canEditReview && state.draftNote ? (
                         <button
                           type="button"
-                          className={[
-                            "admin-cell-note-btn",
-                            state.draftNote && "has-note",
-                            state.isSelectedCell && "is-editing",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          aria-label={
-                            state.draftNote
-                              ? `Ubah catatan revisi untuk ${label}`
-                              : `Tambah catatan revisi untuk ${label}`
-                          }
-                          title={
-                            state.draftNote
-                              ? "Ubah catatan revisi"
-                              : "Beri catatan revisi"
-                          }
-                          aria-pressed={state.isSelectedCell}
-                          onClick={() =>
-                            setActiveNoteIndex((current) =>
-                              current === itemIndex ? null : itemIndex,
-                            )
-                          }
+                          className="admin-review-cell-note"
+                          onClick={() => setActiveNoteIndex(itemIndex)}
                         >
-                          <Icon name="note" size={14} />
+                          <strong>Catatan:</strong>
+                          <span>{state.draftNote}</span>
                         </button>
-                      )}
+                      ) : canEditReview && state.savedNote ? (
+                        <div className="admin-review-cell-prior">
+                          <strong>Catatan sebelumnya:</strong>
+                          <span>{state.savedNote}</span>
+                        </div>
+                      ) : !canEditReview && state.savedNote ? (
+                        <div className="cell-note admin-review-cell-saved">
+                          <strong>Catatan:</strong>
+                          <span>{state.savedNote}</span>
+                        </div>
+                      ) : null}
                     </div>
-                    {canEditReview && state.draftNote ? (
-                      <button
-                        type="button"
-                        className="admin-review-cell-note"
-                        onClick={() => setActiveNoteIndex(itemIndex)}
-                      >
-                        <strong>Catatan:</strong>
-                        <span>{state.draftNote}</span>
-                      </button>
-                    ) : canEditReview && state.savedNote ? (
-                      <div className="admin-review-cell-prior">
-                        <strong>Catatan sebelumnya:</strong>
-                        <span>{state.savedNote}</span>
-                      </div>
-                    ) : !canEditReview && state.savedNote ? (
-                      <div className="cell-note admin-review-cell-saved">
-                        <strong>Catatan:</strong>
-                        <span>{state.savedNote}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                )
-              }
+                  )
+                }
 
-              const renderTargetsTable = () => {
-                const criteriaSlots = getSasaranKinerjaReviewCriteria(selected)
-                return (
-                  <div className="admin-review-table-wrap target-table-wrap">
-                    <table className="detail-target-table admin-review-target-table">
-                      <colgroup>
-                        <col style={{ width: "50px" }} />
-                        <col style={{ width: "21%" }} />
-                        <col style={{ width: "50px" }} />
-                        <col style={{ width: "23%" }} />
-                        <col style={{ width: "25%" }} />
-                        <col style={{ width: "15%" }} />
-                        <col style={{ width: "16%" }} />
-                      </colgroup>
-                      <thead>
-                        <tr>
-                          <th
-                            style={{
-                              width: "50px",
-                              textAlign: "center",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            NO
-                          </th>
-                          <th>STRATEGI</th>
-                          <th colSpan={2} style={{ textAlign: "center" }}>
-                            PROGRAM KERJA
-                          </th>
-                          <th>SASARAN</th>
-                          <th style={{ textAlign: "center" }}>
-                            BULAN PELAKSANAAN PROGRAM KERJA
-                          </th>
-                          <th>KETERANGAN</th>
-                        </tr>
-                        <tr className="subhead-number-row">
-                          <th style={{ textAlign: "center" }}>1</th>
-                          <th style={{ textAlign: "center" }}>2</th>
-                          <th style={{ textAlign: "center" }}>3</th>
-                          <th style={{ textAlign: "center" }}>4</th>
-                          <th style={{ textAlign: "center" }}>5</th>
-                          <th style={{ textAlign: "center" }}>6</th>
-                          <th style={{ textAlign: "center" }}>7</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {criteriaSlots.map((crit, cIdx) => {
-                          const critState = getCellState(crit.critItemIdx)
-                          const critVal =
-                            critState.item?.value ?? crit.name ?? "-"
-                          return (
-                            <Fragment key={crit.id}>
-                              <tr className="criteria-section-row">
-                                <td className="criteria-num-cell">{cIdx + 1}</td>
-                                <td
-                                  colSpan={6}
-                                  className={[
-                                    "criteria-title-cell",
-                                    critState.tdStateClass,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" ")}
-                                >
-                                  {renderReviewCell(
-                                    crit.critItemIdx,
-                                    critVal,
-                                    `Kriteria ${cIdx + 1}`,
-                                  )}
-                                </td>
-                              </tr>
-                              {crit.stratSlots.map((strat, sIdx) => {
-                                const stratNum = `${cIdx + 1}.${sIdx + 1}`
-                                const stratState = getCellState(
-                                  strat.stratItemIdx,
-                                )
-                                const stratVal =
-                                  stratState.item?.value ?? strat.name ?? "-"
-                                const totalStratRows = strat.programSlots.reduce(
-                                  (acc, p) =>
-                                    acc + Math.max(1, p.sasaranSlots.length),
-                                  0,
-                                )
-
-                                return strat.programSlots.map((prog, pIdx) => {
-                                  const progNum = `${stratNum}.${pIdx + 1}`
-                                  const progState = getCellState(
-                                    prog.progItemIdx,
+                const renderTargetsTable = () => {
+                  const criteriaSlots = getSasaranKinerjaReviewCriteria(selected)
+                  return (
+                    <div className="admin-review-table-wrap target-table-wrap">
+                      <table className="detail-target-table admin-review-target-table">
+                        <colgroup>
+                          <col style={{ width: "50px" }} />
+                          <col style={{ width: "21%" }} />
+                          <col style={{ width: "50px" }} />
+                          <col style={{ width: "23%" }} />
+                          <col style={{ width: "25%" }} />
+                          <col style={{ width: "15%" }} />
+                          <col style={{ width: "16%" }} />
+                        </colgroup>
+                        <thead>
+                          <tr>
+                            <th
+                              style={{
+                                width: "50px",
+                                textAlign: "center",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              NO
+                            </th>
+                            <th>STRATEGI</th>
+                            <th colSpan={2} style={{ textAlign: "center" }}>
+                              PROGRAM KERJA
+                            </th>
+                            <th>SASARAN</th>
+                            <th style={{ textAlign: "center" }}>
+                              BULAN PELAKSANAAN PROGRAM KERJA
+                            </th>
+                            <th>KETERANGAN</th>
+                          </tr>
+                          <tr className="subhead-number-row">
+                            <th style={{ textAlign: "center" }}>1</th>
+                            <th style={{ textAlign: "center" }}>2</th>
+                            <th style={{ textAlign: "center" }}>3</th>
+                            <th style={{ textAlign: "center" }}>4</th>
+                            <th style={{ textAlign: "center" }}>5</th>
+                            <th style={{ textAlign: "center" }}>6</th>
+                            <th style={{ textAlign: "center" }}>7</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {criteriaSlots.map((crit, cIdx) => {
+                            const critState = getCellState(crit.critItemIdx)
+                            const critVal =
+                              critState.item?.value ?? crit.name ?? "-"
+                            return (
+                              <Fragment key={crit.id}>
+                                <tr className="criteria-section-row">
+                                  <td className="criteria-num-cell">{cIdx + 1}</td>
+                                  <td
+                                    colSpan={6}
+                                    className={[
+                                      "criteria-title-cell",
+                                      critState.tdStateClass,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" ")}
+                                  >
+                                    {renderReviewCell(
+                                      crit.critItemIdx,
+                                      critVal,
+                                      `Kriteria ${cIdx + 1}`,
+                                    )}
+                                  </td>
+                                </tr>
+                                {crit.stratSlots.map((strat, sIdx) => {
+                                  const stratNum = `${cIdx + 1}.${sIdx + 1}`
+                                  const stratState = getCellState(
+                                    strat.stratItemIdx,
                                   )
-                                  const progVal =
-                                    progState.item?.value ?? prog.name ?? "-"
-                                  const rows = prog.sasaranSlots.length
-                                    ? prog.sasaranSlots
-                                    : [
+                                  const stratVal =
+                                    stratState.item?.value ?? strat.name ?? "-"
+                                  const totalStratRows = strat.programSlots.reduce(
+                                    (acc, p) =>
+                                      acc + Math.max(1, p.sasaranSlots.length),
+                                    0,
+                                  )
+
+                                  return strat.programSlots.map((prog, pIdx) => {
+                                    const progNum = `${stratNum}.${pIdx + 1}`
+                                    const progState = getCellState(
+                                      prog.progItemIdx,
+                                    )
+                                    const progVal =
+                                      progState.item?.value ?? prog.name ?? "-"
+                                    const rows = prog.sasaranSlots.length
+                                      ? prog.sasaranSlots
+                                      : [
                                         {
                                           id: `${prog.id}-empty`,
                                           sasaran: "-",
@@ -1990,534 +2094,534 @@ export function Admin({
                                           keteranganItemIdx: -1,
                                         },
                                       ]
-                                  const progRows = rows.length
+                                    const progRows = rows.length
 
-                                  return rows.map((sas, sasIdx) => {
-                                    const isFirstSasOfProg = sasIdx === 0
-                                    const isFirstProgOfStrat =
-                                      pIdx === 0 && isFirstSasOfProg
-                                    const sasState = getCellState(
-                                      sas.sasaranItemIdx,
-                                    )
-                                    const bulanState = getCellState(
-                                      sas.bulanItemIdx,
-                                    )
-                                    const ketState = getCellState(
-                                      sas.keteranganItemIdx,
-                                    )
-                                    const sasVal =
-                                      sasState.item?.value ?? sas.sasaran
-                                    const bulanVal =
-                                      bulanState.item?.value ??
-                                      formatBulanPelaksanaan(
-                                        sas.bulanMulai,
-                                        sas.bulanSelesai,
+                                    return rows.map((sas, sasIdx) => {
+                                      const isFirstSasOfProg = sasIdx === 0
+                                      const isFirstProgOfStrat =
+                                        pIdx === 0 && isFirstSasOfProg
+                                      const sasState = getCellState(
+                                        sas.sasaranItemIdx,
                                       )
-                                    const ketVal =
-                                      ketState.item?.value ?? sas.keterangan
+                                      const bulanState = getCellState(
+                                        sas.bulanItemIdx,
+                                      )
+                                      const ketState = getCellState(
+                                        sas.keteranganItemIdx,
+                                      )
+                                      const sasVal =
+                                        sasState.item?.value ?? sas.sasaran
+                                      const bulanVal =
+                                        bulanState.item?.value ??
+                                        formatBulanPelaksanaan(
+                                          sas.bulanMulai,
+                                          sas.bulanSelesai,
+                                        )
+                                      const ketVal =
+                                        ketState.item?.value ?? sas.keterangan
 
-                                    return (
-                                      <tr key={`${prog.id}-${sas.id}`}>
-                                        {isFirstProgOfStrat && (
-                                          <>
-                                            <td
-                                              rowSpan={totalStratRows}
-                                              className="admin-review-num-cell"
-                                            >
-                                              {stratNum}
-                                            </td>
-                                            <td
-                                              rowSpan={totalStratRows}
-                                              className={stratState.tdStateClass}
-                                            >
-                                              {renderReviewCell(
-                                                strat.stratItemIdx,
-                                                stratVal,
-                                                `Strategi ${stratNum}`,
-                                              )}
-                                            </td>
-                                          </>
-                                        )}
-                                        {isFirstSasOfProg && (
-                                          <>
-                                            <td
-                                              rowSpan={progRows}
-                                              className="admin-review-num-cell"
-                                            >
-                                              {progNum}
-                                            </td>
-                                            <td
-                                              rowSpan={progRows}
-                                              className={progState.tdStateClass}
-                                            >
-                                              {renderReviewCell(
-                                                prog.progItemIdx,
-                                                progVal,
-                                                `Program Kerja ${progNum}`,
-                                              )}
-                                            </td>
-                                          </>
-                                        )}
-                                        <td className={sasState.tdStateClass}>
-                                          {renderReviewCell(
-                                            sas.sasaranItemIdx,
-                                            sasVal,
-                                            `Sasaran ${progNum}.${sasIdx + 1}`,
+                                      return (
+                                        <tr key={`${prog.id}-${sas.id}`}>
+                                          {isFirstProgOfStrat && (
+                                            <>
+                                              <td
+                                                rowSpan={totalStratRows}
+                                                className="admin-review-num-cell"
+                                              >
+                                                {stratNum}
+                                              </td>
+                                              <td
+                                                rowSpan={totalStratRows}
+                                                className={stratState.tdStateClass}
+                                              >
+                                                {renderReviewCell(
+                                                  strat.stratItemIdx,
+                                                  stratVal,
+                                                  `Strategi ${stratNum}`,
+                                                )}
+                                              </td>
+                                            </>
                                           )}
-                                        </td>
-                                        <td className={bulanState.tdStateClass}>
-                                          {renderReviewCell(
-                                            sas.bulanItemIdx,
-                                            bulanVal,
-                                            `Bulan Pelaksanaan ${progNum}.${sasIdx + 1}`,
+                                          {isFirstSasOfProg && (
+                                            <>
+                                              <td
+                                                rowSpan={progRows}
+                                                className="admin-review-num-cell"
+                                              >
+                                                {progNum}
+                                              </td>
+                                              <td
+                                                rowSpan={progRows}
+                                                className={progState.tdStateClass}
+                                              >
+                                                {renderReviewCell(
+                                                  prog.progItemIdx,
+                                                  progVal,
+                                                  `Program Kerja ${progNum}`,
+                                                )}
+                                              </td>
+                                            </>
                                           )}
-                                        </td>
-                                        <td className={ketState.tdStateClass}>
-                                          {renderReviewCell(
-                                            sas.keteranganItemIdx,
-                                            ketVal,
-                                            `Keterangan ${progNum}.${sasIdx + 1}`,
-                                          )}
-                                        </td>
-                                      </tr>
-                                    )
+                                          <td className={sasState.tdStateClass}>
+                                            {renderReviewCell(
+                                              sas.sasaranItemIdx,
+                                              sasVal,
+                                              `Sasaran ${progNum}.${sasIdx + 1}`,
+                                            )}
+                                          </td>
+                                          <td className={bulanState.tdStateClass}>
+                                            {renderReviewCell(
+                                              sas.bulanItemIdx,
+                                              bulanVal,
+                                              `Bulan Pelaksanaan ${progNum}.${sasIdx + 1}`,
+                                            )}
+                                          </td>
+                                          <td className={ketState.tdStateClass}>
+                                            {renderReviewCell(
+                                              sas.keteranganItemIdx,
+                                              ketVal,
+                                              `Keterangan ${progNum}.${sasIdx + 1}`,
+                                            )}
+                                          </td>
+                                        </tr>
+                                      )
+                                    })
                                   })
-                                })
-                              })}
-                            </Fragment>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              }
-
-              const renderTriwulanTable = () => {
-                const triwulanPrograms = getTriwulanData(selected)
-                return (
-                  <div className="admin-review-table-wrap target-table-wrap">
-                    <table className="detail-triwulan-table admin-review-triwulan-table">
-                      <colgroup>
-                        <col style={{ width: "46px" }} />
-                        <col style={{ width: "13%" }} />
-                        <col style={{ width: "13%" }} />
-                        <col style={{ width: "9%" }} />
-                        <col style={{ width: "10%" }} />
-                        <col style={{ width: "10%" }} />
-                        <col style={{ width: "6%" }} />
-                        <col style={{ width: "9%" }} />
-                        <col style={{ width: "9%" }} />
-                        <col style={{ width: "8%" }} />
-                        <col style={{ width: "8%" }} />
-                        <col style={{ width: "9%" }} />
-                      </colgroup>
-                      <thead>
-                        <tr>
-                          <th
-                            className="sticky-no"
-                            style={{
-                              width: "46px",
-                              textAlign: "center",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            NO
-                          </th>
-                          <th className="sticky-program">PROGRAM KERJA</th>
-                          <th>SASARAN</th>
-                          <th style={{ textAlign: "center" }}>
-                            BULAN PELAKSANAAN PROGRAM KERJA
-                          </th>
-                          <th>TAHAP PELAKSANAAN (URAIAN)</th>
-                          <th>REALISASI PELAKSANAAN (URAIAN)</th>
-                          <th style={{ textAlign: "center" }}>
-                            REALISASI PELAKSANAAN (%)
-                          </th>
-                          <th>KENDALA</th>
-                          <th>RENCANA PENYELESAIAN KENDALA</th>
-                          <th>WAKTU PENYELESAIAN KENDALA</th>
-                          <th>KETERANGAN</th>
-                          <th>LINK EVIDENCE</th>
-                        </tr>
-                        <tr className="subhead-number-row">
-                          <th className="sticky-no" style={{ textAlign: "center" }}>
-                            1
-                          </th>
-                          <th
-                            className="sticky-program"
-                            style={{ textAlign: "center" }}
-                          >
-                            2
-                          </th>
-                          <th style={{ textAlign: "center" }}>3</th>
-                          <th style={{ textAlign: "center" }}>4</th>
-                          <th style={{ textAlign: "center" }}>5</th>
-                          <th style={{ textAlign: "center" }}>6</th>
-                          <th style={{ textAlign: "center" }}>7</th>
-                          <th style={{ textAlign: "center" }}>8</th>
-                          <th style={{ textAlign: "center" }}>9</th>
-                          <th style={{ textAlign: "center" }}>10</th>
-                          <th style={{ textAlign: "center" }}>11</th>
-                          <th style={{ textAlign: "center" }}>12</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {triwulanPrograms.map((prog, pIdx) => {
-                          const totalSasRows = Math.max(
-                            1,
-                            prog.sasaranList.length,
-                          )
-                          const extraProgramNoteIndexes = prog.sasaranList
-                            .slice(1)
-                            .map((s) => s.baseIdx)
-                          return prog.sasaranList.map((sas, sIdx) => {
-                            const isFirstSas = sIdx === 0
-                            const baseIdx =
-                              sas.baseIdx ?? pIdx * 11 + sIdx * 11
-                            const valAt = (offset: number, fallback: string) =>
-                              selected.items[baseIdx + offset]?.value ??
-                              fallback
-
-                            const progState = getCellState(
-                              baseIdx,
-                              extraProgramNoteIndexes,
+                                })}
+                              </Fragment>
                             )
-                            const sasState = getCellState(baseIdx + 1)
-                            const monthState = getCellState(baseIdx + 2)
-                            const stageState = getCellState(baseIdx + 3)
-                            const realState = getCellState(baseIdx + 4)
-                            const pctState = getCellState(baseIdx + 5)
-                            const obsState = getCellState(baseIdx + 6)
-                            const solState = getCellState(baseIdx + 7)
-                            const solTimeState = getCellState(baseIdx + 8)
-                            const noteState = getCellState(baseIdx + 9)
-                            const evState = getCellState(baseIdx + 10)
-                            const rawMonth = valAt(2, sas.month)
-                            const formattedMonth = /^\d{4}-\d{2}$/.test(
-                              rawMonth.trim(),
-                            )
-                              ? formatBulanPelaksanaan(rawMonth.trim())
-                              : rawMonth
-
-                            return (
-                              <tr key={`${prog.id}-${sas.id || sIdx}`}>
-                                {isFirstSas && (
-                                  <>
-                                    <td
-                                      rowSpan={totalSasRows}
-                                      className="sticky-no admin-review-num-cell"
-                                    >
-                                      {pIdx + 1}
-                                    </td>
-                                    <td
-                                      rowSpan={totalSasRows}
-                                      className={[
-                                        "sticky-program",
-                                        progState.tdStateClass,
-                                      ]
-                                        .filter(Boolean)
-                                        .join(" ")}
-                                    >
-                                      {renderReviewCell(
-                                        baseIdx,
-                                        valAt(0, prog.program),
-                                        `Program Kerja #${pIdx + 1}`,
-                                        {
-                                          extraNoteIndexes:
-                                            extraProgramNoteIndexes,
-                                        },
-                                      )}
-                                    </td>
-                                  </>
-                                )}
-                                <td className={sasState.tdStateClass}>
-                                  {renderReviewCell(
-                                    baseIdx + 1,
-                                    valAt(1, sas.target),
-                                    `Sasaran #${pIdx + 1}.${sIdx + 1}`,
-                                  )}
-                                </td>
-                                <td className={monthState.tdStateClass}>
-                                  {renderReviewCell(
-                                    baseIdx + 2,
-                                    formattedMonth,
-                                    `Bulan Pelaksanaan #${pIdx + 1}.${sIdx + 1}`,
-                                  )}
-                                </td>
-                                <td className={stageState.tdStateClass}>
-                                  {renderReviewCell(
-                                    baseIdx + 3,
-                                    valAt(3, sas.stage),
-                                    `Tahap Pelaksanaan #${pIdx + 1}.${sIdx + 1}`,
-                                  )}
-                                </td>
-                                <td className={realState.tdStateClass}>
-                                  {renderReviewCell(
-                                    baseIdx + 4,
-                                    valAt(4, sas.realization),
-                                    `Realisasi Pelaksanaan #${pIdx + 1}.${sIdx + 1}`,
-                                  )}
-                                </td>
-                                <td
-                                  className={pctState.tdStateClass}
-                                  style={{ fontWeight: 600 }}
-                                >
-                                  {renderReviewCell(
-                                    baseIdx + 5,
-                                    valAt(5, sas.percentage),
-                                    `Realisasi (%) #${pIdx + 1}.${sIdx + 1}`,
-                                    { centerText: true },
-                                  )}
-                                </td>
-                                <td className={obsState.tdStateClass}>
-                                  {renderReviewCell(
-                                    baseIdx + 6,
-                                    valAt(6, sas.obstacle),
-                                    `Kendala #${pIdx + 1}.${sIdx + 1}`,
-                                  )}
-                                </td>
-                                <td className={solState.tdStateClass}>
-                                  {renderReviewCell(
-                                    baseIdx + 7,
-                                    valAt(7, sas.solution),
-                                    `Rencana Penyelesaian #${pIdx + 1}.${sIdx + 1}`,
-                                  )}
-                                </td>
-                                <td className={solTimeState.tdStateClass}>
-                                  {renderReviewCell(
-                                    baseIdx + 8,
-                                    valAt(8, sas.solutionTime),
-                                    `Waktu Penyelesaian #${pIdx + 1}.${sIdx + 1}`,
-                                  )}
-                                </td>
-                                <td className={noteState.tdStateClass}>
-                                  {renderReviewCell(
-                                    baseIdx + 9,
-                                    valAt(9, sas.notes),
-                                    `Keterangan #${pIdx + 1}.${sIdx + 1}`,
-                                  )}
-                                </td>
-                                <td
-                                  className={evState.tdStateClass}
-                                  style={{ wordBreak: "break-all" }}
-                                >
-                                  {renderReviewCell(
-                                    baseIdx + 10,
-                                    valAt(10, sas.evidence),
-                                    `Link Evidence #${pIdx + 1}.${sIdx + 1}`,
-                                    { isLink: true },
-                                  )}
-                                </td>
-                              </tr>
-                            )
-                          })
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              }
-
-              return (
-                <div
-                  className="admin-review-overlay"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label={`Pemeriksaan ${selected.title}`}
-                >
-                  <section className="admin-review-modal is-table-mode">
-                    <header className="admin-review-modal-header is-minimal">
-                      <button
-                        type="button"
-                        className="admin-review-back"
-                        aria-label={backLabel}
-                        title={backLabel}
-                        onClick={backFromReview}
-                      >
-                        <Icon name="arrowLeft" size={19} />
-                      </button>
-                      <button
-                        type="button"
-                        className="admin-review-close"
-                        aria-label="Tutup pemeriksaan"
-                        title="Tutup pemeriksaan"
-                        onClick={closeReview}
-                      >
-                        ✕
-                      </button>
-                    </header>
-
-                    <div className="admin-review-table-toolbar">
-                      <p>
-                        {canEditReview
-                          ? "Klik ikon catatan kecil pada sel tabel untuk menulis atau mengubah catatan revisi."
-                          : "Menampilkan tabel dokumen beserta catatan hasil pemeriksaan."}
-                      </p>
-                      <div className="admin-review-table-badges">
-                        <span>
-                          {reviewPrograms.length} program · {totalSasaranCount}{" "}
-                          sasaran
-                        </span>
-                        <span>
-                          {selected.type === "Sasaran Kinerja"
-                            ? "7 kolom"
-                            : "12 kolom"}
-                        </span>
-                      </div>
+                          })}
+                        </tbody>
+                      </table>
                     </div>
+                  )
+                }
 
-                    <div className="admin-review-table-scroll">
-                      <AnnualSourceSummary record={selected} />
+                const renderTriwulanTable = () => {
+                  const triwulanPrograms = getTriwulanData(selected)
+                  return (
+                    <div className="admin-review-table-wrap target-table-wrap">
+                      <table className="detail-triwulan-table admin-review-triwulan-table">
+                        <colgroup>
+                          <col style={{ width: "46px" }} />
+                          <col style={{ width: "13%" }} />
+                          <col style={{ width: "13%" }} />
+                          <col style={{ width: "9%" }} />
+                          <col style={{ width: "10%" }} />
+                          <col style={{ width: "10%" }} />
+                          <col style={{ width: "6%" }} />
+                          <col style={{ width: "9%" }} />
+                          <col style={{ width: "9%" }} />
+                          <col style={{ width: "8%" }} />
+                          <col style={{ width: "8%" }} />
+                          <col style={{ width: "9%" }} />
+                        </colgroup>
+                        <thead>
+                          <tr>
+                            <th
+                              className="sticky-no"
+                              style={{
+                                width: "46px",
+                                textAlign: "center",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              NO
+                            </th>
+                            <th className="sticky-program">PROGRAM KERJA</th>
+                            <th>SASARAN</th>
+                            <th style={{ textAlign: "center" }}>
+                              BULAN PELAKSANAAN PROGRAM KERJA
+                            </th>
+                            <th>TAHAP PELAKSANAAN (URAIAN)</th>
+                            <th>REALISASI PELAKSANAAN (URAIAN)</th>
+                            <th style={{ textAlign: "center" }}>
+                              REALISASI PELAKSANAAN (%)
+                            </th>
+                            <th>KENDALA</th>
+                            <th>RENCANA PENYELESAIAN KENDALA</th>
+                            <th>WAKTU PENYELESAIAN KENDALA</th>
+                            <th>KETERANGAN</th>
+                            <th>LINK EVIDENCE</th>
+                          </tr>
+                          <tr className="subhead-number-row">
+                            <th className="sticky-no" style={{ textAlign: "center" }}>
+                              1
+                            </th>
+                            <th
+                              className="sticky-program"
+                              style={{ textAlign: "center" }}
+                            >
+                              2
+                            </th>
+                            <th style={{ textAlign: "center" }}>3</th>
+                            <th style={{ textAlign: "center" }}>4</th>
+                            <th style={{ textAlign: "center" }}>5</th>
+                            <th style={{ textAlign: "center" }}>6</th>
+                            <th style={{ textAlign: "center" }}>7</th>
+                            <th style={{ textAlign: "center" }}>8</th>
+                            <th style={{ textAlign: "center" }}>9</th>
+                            <th style={{ textAlign: "center" }}>10</th>
+                            <th style={{ textAlign: "center" }}>11</th>
+                            <th style={{ textAlign: "center" }}>12</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {triwulanPrograms.map((prog, pIdx) => {
+                            const totalSasRows = Math.max(
+                              1,
+                              prog.sasaranList.length,
+                            )
+                            const extraProgramNoteIndexes = prog.sasaranList
+                              .slice(1)
+                              .map((s) => s.baseIdx)
+                            return prog.sasaranList.map((sas, sIdx) => {
+                              const isFirstSas = sIdx === 0
+                              const baseIdx =
+                                sas.baseIdx ?? pIdx * 11 + sIdx * 11
+                              const valAt = (offset: number, fallback: string) =>
+                                selected.items[baseIdx + offset]?.value ??
+                                fallback
 
-                      {selected.type === "Sasaran Kinerja"
-                        ? renderTargetsTable()
-                        : renderTriwulanTable()}
+                              const progState = getCellState(
+                                baseIdx,
+                                extraProgramNoteIndexes,
+                              )
+                              const sasState = getCellState(baseIdx + 1)
+                              const monthState = getCellState(baseIdx + 2)
+                              const stageState = getCellState(baseIdx + 3)
+                              const realState = getCellState(baseIdx + 4)
+                              const pctState = getCellState(baseIdx + 5)
+                              const obsState = getCellState(baseIdx + 6)
+                              const solState = getCellState(baseIdx + 7)
+                              const solTimeState = getCellState(baseIdx + 8)
+                              const noteState = getCellState(baseIdx + 9)
+                              const evState = getCellState(baseIdx + 10)
+                              const rawMonth = valAt(2, sas.month)
+                              const formattedMonth = /^\d{4}-\d{2}$/.test(
+                                rawMonth.trim(),
+                              )
+                                ? formatBulanPelaksanaan(rawMonth.trim())
+                                : rawMonth
 
-                      <details className="admin-review-history">
-                        <summary>Riwayat pemeriksaan</summary>
-                        {selected.reviews?.length ? (
-                          <ol>
-                            {selected.reviews.map((review) => (
-                              <li key={review.id}>
-                                {new Date(review.at).toLocaleString("id-ID")} ·{" "}
-                                {review.actor} · {review.action}
-                                <ul>
-                                  {Object.entries(review.notes).map(
-                                    ([index, note]) => (
-                                      <li key={index}>
-                                        {formatReviewItemLocation(
-                                          selected,
-                                          reviewPrograms,
-                                          Number(index),
+                              return (
+                                <tr key={`${prog.id}-${sas.id || sIdx}`}>
+                                  {isFirstSas && (
+                                    <>
+                                      <td
+                                        rowSpan={totalSasRows}
+                                        className="sticky-no admin-review-num-cell"
+                                      >
+                                        {pIdx + 1}
+                                      </td>
+                                      <td
+                                        rowSpan={totalSasRows}
+                                        className={[
+                                          "sticky-program",
+                                          progState.tdStateClass,
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" ")}
+                                      >
+                                        {renderReviewCell(
+                                          baseIdx,
+                                          valAt(0, prog.program),
+                                          `Program Kerja #${pIdx + 1}`,
+                                          {
+                                            extraNoteIndexes:
+                                              extraProgramNoteIndexes,
+                                          },
                                         )}
-                                        : {note}
-                                      </li>
-                                    ),
+                                      </td>
+                                    </>
                                   )}
-                                </ul>
-                              </li>
-                            ))}
-                          </ol>
-                        ) : (
-                          <p>Belum ada riwayat pemeriksaan tersimpan.</p>
-                        )}
-                      </details>
+                                  <td className={sasState.tdStateClass}>
+                                    {renderReviewCell(
+                                      baseIdx + 1,
+                                      valAt(1, sas.target),
+                                      `Sasaran #${pIdx + 1}.${sIdx + 1}`,
+                                    )}
+                                  </td>
+                                  <td className={monthState.tdStateClass}>
+                                    {renderReviewCell(
+                                      baseIdx + 2,
+                                      formattedMonth,
+                                      `Bulan Pelaksanaan #${pIdx + 1}.${sIdx + 1}`,
+                                    )}
+                                  </td>
+                                  <td className={stageState.tdStateClass}>
+                                    {renderReviewCell(
+                                      baseIdx + 3,
+                                      valAt(3, sas.stage),
+                                      `Tahap Pelaksanaan #${pIdx + 1}.${sIdx + 1}`,
+                                    )}
+                                  </td>
+                                  <td className={realState.tdStateClass}>
+                                    {renderReviewCell(
+                                      baseIdx + 4,
+                                      valAt(4, sas.realization),
+                                      `Realisasi Pelaksanaan #${pIdx + 1}.${sIdx + 1}`,
+                                    )}
+                                  </td>
+                                  <td
+                                    className={pctState.tdStateClass}
+                                    style={{ fontWeight: 600 }}
+                                  >
+                                    {renderReviewCell(
+                                      baseIdx + 5,
+                                      valAt(5, sas.percentage),
+                                      `Realisasi (%) #${pIdx + 1}.${sIdx + 1}`,
+                                      { centerText: true },
+                                    )}
+                                  </td>
+                                  <td className={obsState.tdStateClass}>
+                                    {renderReviewCell(
+                                      baseIdx + 6,
+                                      valAt(6, sas.obstacle),
+                                      `Kendala #${pIdx + 1}.${sIdx + 1}`,
+                                    )}
+                                  </td>
+                                  <td className={solState.tdStateClass}>
+                                    {renderReviewCell(
+                                      baseIdx + 7,
+                                      valAt(7, sas.solution),
+                                      `Rencana Penyelesaian #${pIdx + 1}.${sIdx + 1}`,
+                                    )}
+                                  </td>
+                                  <td className={solTimeState.tdStateClass}>
+                                    {renderReviewCell(
+                                      baseIdx + 8,
+                                      valAt(8, sas.solutionTime),
+                                      `Waktu Penyelesaian #${pIdx + 1}.${sIdx + 1}`,
+                                    )}
+                                  </td>
+                                  <td className={noteState.tdStateClass}>
+                                    {renderReviewCell(
+                                      baseIdx + 9,
+                                      valAt(9, sas.notes),
+                                      `Keterangan #${pIdx + 1}.${sIdx + 1}`,
+                                    )}
+                                  </td>
+                                  <td
+                                    className={evState.tdStateClass}
+                                    style={{ wordBreak: "break-all" }}
+                                  >
+                                    {renderReviewCell(
+                                      baseIdx + 10,
+                                      valAt(10, sas.evidence),
+                                      `Link Evidence #${pIdx + 1}.${sIdx + 1}`,
+                                      { isLink: true },
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })
+                          })}
+                        </tbody>
+                      </table>
                     </div>
+                  )
+                }
 
-                    {canEditReview &&
-                      activeNoteIndex !== null &&
-                      activeNoteItem && (
-                        <div
-                          className="admin-review-note-dock"
-                          role="region"
-                          aria-label="Editor catatan revisi indikator"
+                return (
+                  <div
+                    className="admin-review-overlay"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label={`Pemeriksaan ${selected.title}`}
+                  >
+                    <section className="admin-review-modal is-table-mode">
+                      <header className="admin-review-modal-header is-minimal">
+                        <button
+                          type="button"
+                          className="admin-review-back"
+                          aria-label={backLabel}
+                          title={backLabel}
+                          onClick={backFromReview}
                         >
-                          <div className="admin-review-note-dock-head">
-                            <div className="admin-review-note-dock-info">
-                              <strong>
-                                {formatReviewItemLocation(
-                                  selected,
-                                  reviewPrograms,
-                                  activeNoteIndex,
-                                )}
-                              </strong>
-                              <span>
-                                Isi laporan:{" "}
-                                {(activeNoteItem.label.includes("Bulan") &&
-                                /^\d{4}-\d{2}$/.test(
-                                  (activeNoteItem.value ?? "").trim(),
-                                )
-                                  ? formatBulanPelaksanaan(
+                          <Icon name="arrowLeft" size={19} />
+                        </button>
+                        <button
+                          type="button"
+                          className="admin-review-close"
+                          aria-label="Tutup pemeriksaan"
+                          title="Tutup pemeriksaan"
+                          onClick={closeReview}
+                        >
+                          ✕
+                        </button>
+                      </header>
+
+                      <div className="admin-review-table-toolbar">
+                        <p>
+                          {canEditReview
+                            ? "Klik ikon catatan kecil pada sel tabel untuk menulis atau mengubah catatan revisi."
+                            : "Menampilkan tabel dokumen beserta catatan hasil pemeriksaan."}
+                        </p>
+                        <div className="admin-review-table-badges">
+                          <span>
+                            {reviewPrograms.length} program · {totalSasaranCount}{" "}
+                            sasaran
+                          </span>
+                          <span>
+                            {selected.type === "Sasaran Kinerja"
+                              ? "7 kolom"
+                              : "12 kolom"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="admin-review-table-scroll">
+                        <AnnualSourceSummary record={selected} />
+
+                        {selected.type === "Sasaran Kinerja"
+                          ? renderTargetsTable()
+                          : renderTriwulanTable()}
+
+                        <details className="admin-review-history">
+                          <summary>Riwayat pemeriksaan</summary>
+                          {selected.reviews?.length ? (
+                            <ol>
+                              {selected.reviews.map((review) => (
+                                <li key={review.id}>
+                                  {new Date(review.at).toLocaleString("id-ID")} ·{" "}
+                                  {review.actor} · {review.action}
+                                  <ul>
+                                    {Object.entries(review.notes).map(
+                                      ([index, note]) => (
+                                        <li key={index}>
+                                          {formatReviewItemLocation(
+                                            selected,
+                                            reviewPrograms,
+                                            Number(index),
+                                          )}
+                                          : {note}
+                                        </li>
+                                      ),
+                                    )}
+                                  </ul>
+                                </li>
+                              ))}
+                            </ol>
+                          ) : (
+                            <p>Belum ada riwayat pemeriksaan tersimpan.</p>
+                          )}
+                        </details>
+                      </div>
+
+                      {canEditReview &&
+                        activeNoteIndex !== null &&
+                        activeNoteItem && (
+                          <div
+                            className="admin-review-note-dock"
+                            role="region"
+                            aria-label="Editor catatan revisi indikator"
+                          >
+                            <div className="admin-review-note-dock-head">
+                              <div className="admin-review-note-dock-info">
+                                <strong>
+                                  {formatReviewItemLocation(
+                                    selected,
+                                    reviewPrograms,
+                                    activeNoteIndex,
+                                  )}
+                                </strong>
+                                <span>
+                                  Isi laporan:{" "}
+                                  {(activeNoteItem.label.includes("Bulan") &&
+                                    /^\d{4}-\d{2}$/.test(
                                       (activeNoteItem.value ?? "").trim(),
                                     )
-                                  : activeNoteItem.value?.trim()) ||
-                                  "Belum diisi"}
-                              </span>
-                            </div>
-                            <div className="admin-review-note-dock-actions">
-                              {Boolean(
-                                notes[String(activeNoteIndex)]?.trim(),
-                              ) && (
+                                    ? formatBulanPelaksanaan(
+                                      (activeNoteItem.value ?? "").trim(),
+                                    )
+                                    : activeNoteItem.value?.trim()) ||
+                                    "Belum diisi"}
+                                </span>
+                              </div>
+                              <div className="admin-review-note-dock-actions">
+                                {Boolean(
+                                  notes[String(activeNoteIndex)]?.trim(),
+                                ) && (
+                                    <button
+                                      type="button"
+                                      className="admin-review-note-clear"
+                                      onClick={() => {
+                                        setNotes((current) => {
+                                          const next = { ...current }
+                                          delete next[String(activeNoteIndex)]
+                                          return next
+                                        })
+                                        setActiveNoteIndex(null)
+                                      }}
+                                    >
+                                      Hapus Catatan
+                                    </button>
+                                  )}
                                 <button
                                   type="button"
-                                  className="admin-review-note-clear"
-                                  onClick={() => {
-                                    setNotes((current) => {
-                                      const next = { ...current }
-                                      delete next[String(activeNoteIndex)]
-                                      return next
-                                    })
-                                    setActiveNoteIndex(null)
-                                  }}
+                                  className="admin-review-note-done"
+                                  onClick={() => setActiveNoteIndex(null)}
                                 >
-                                  Hapus Catatan
+                                  Selesai
                                 </button>
-                              )}
-                              <button
-                                type="button"
-                                className="admin-review-note-done"
-                                onClick={() => setActiveNoteIndex(null)}
-                              >
-                                Selesai
-                              </button>
+                              </div>
                             </div>
+                            <textarea
+                              ref={noteTextareaRef}
+                              id={`admin-review-note-${activeNoteIndex}`}
+                              name={`reviewNotes[${activeNoteIndex}]`}
+                              rows={2}
+                              placeholder="Tuliskan catatan perbaikan untuk indikator ini..."
+                              aria-label={`Catatan revisi ${formatReviewItemLocation(selected, reviewPrograms, activeNoteIndex)}`}
+                              value={notes[String(activeNoteIndex)] ?? ""}
+                              onChange={(e) =>
+                                setNotes((current) => ({
+                                  ...current,
+                                  [String(activeNoteIndex)]: e.target.value,
+                                }))
+                              }
+                            />
                           </div>
-                          <textarea
-                            ref={noteTextareaRef}
-                            id={`admin-review-note-${activeNoteIndex}`}
-                            name={`reviewNotes[${activeNoteIndex}]`}
-                            rows={2}
-                            placeholder="Tuliskan catatan perbaikan untuk indikator ini..."
-                            aria-label={`Catatan revisi ${formatReviewItemLocation(selected, reviewPrograms, activeNoteIndex)}`}
-                            value={notes[String(activeNoteIndex)] ?? ""}
-                            onChange={(e) =>
-                              setNotes((current) => ({
-                                ...current,
-                                [String(activeNoteIndex)]: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                      )}
+                        )}
 
-                    <footer className="admin-review-modal-footer">
-                      <p>
-                        <strong>{reviewPrograms.length}</strong>
-                        <span> program · </span>
-                        <strong>{totalSasaranCount}</strong>
-                        <span> sasaran · </span>
-                        <strong>
-                          {canEditReview
-                            ? revisionNoteCount
-                            : savedRevisionTotal}
-                        </strong>
-                        <span> catatan revisi</span>
-                      </p>
-                      {canEditReview && (
-                        <div className="admin-review-footer-actions">
-                          <button
-                            type="button"
-                            className="admin-review-revision"
-                            onClick={() => decide("Revisi")}
-                          >
-                            Kirim Revisi ({revisionNoteCount})
-                          </button>
-                          <button
-                            type="button"
-                            className="admin-review-approve"
-                            onClick={() => decide("Disetujui")}
-                          >
-                            <Icon name="check" size={16} />
-                            <span>Setujui Dokumen</span>
-                          </button>
-                        </div>
-                      )}
-                    </footer>
-                  </section>
-                </div>
-              )
-            })()}
+                      <footer className="admin-review-modal-footer">
+                        <p>
+                          <strong>{reviewPrograms.length}</strong>
+                          <span> program · </span>
+                          <strong>{totalSasaranCount}</strong>
+                          <span> sasaran · </span>
+                          <strong>
+                            {canEditReview
+                              ? revisionNoteCount
+                              : savedRevisionTotal}
+                          </strong>
+                          <span> catatan revisi</span>
+                        </p>
+                        {canEditReview && (
+                          <div className="admin-review-footer-actions">
+                            <button
+                              type="button"
+                              className="admin-review-revision"
+                              onClick={() => decide("Revisi")}
+                            >
+                              Kirim Revisi ({revisionNoteCount})
+                            </button>
+                            <button
+                              type="button"
+                              className="admin-review-approve"
+                              onClick={() => decide("Disetujui")}
+                            >
+                              <Icon name="check" size={16} />
+                              <span>Setujui Dokumen</span>
+                            </button>
+                          </div>
+                        )}
+                      </footer>
+                    </section>
+                  </div>
+                )
+              })()}
           </>
         )}
       </section>

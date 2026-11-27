@@ -37,6 +37,19 @@ import {
   sourceKey,
 } from "./src/utils/annualSources.ts"
 
+import {
+  SOP_ADMIN_DOC,
+  SOP_STAFF_DOC,
+  filterSopChapters,
+  getAllowedWorkspaceSopRoles,
+  getSopSpec,
+} from "./src/data/sopContent.ts"
+
+import {
+  buildMasterWorkbookBytes,
+  buildUnitPackageZipBytes,
+} from "./src/utils/exportExcel.ts"
+
 const annual = {
   id: "annual",
   type: "Sasaran Kinerja",
@@ -692,4 +705,145 @@ test("getSasaranKinerjaReviewCriteria maps structured multi-sasaran and legacy f
     legacy[0].stratSlots[0].programSlots[0].sasaranSlots[1].keteranganItemIdx,
     8,
   )
+})
+
+test("SOP role isolation, chapter structure, and keyword search work accurately", () => {
+  assert.deepEqual(getAllowedWorkspaceSopRoles("staff"), ["staff"])
+  assert.deepEqual(getAllowedWorkspaceSopRoles("admin"), ["admin"])
+
+  assert.equal(getSopSpec("staff").chapters.length, 5)
+  assert.equal(getSopSpec("admin").chapters.length, 6)
+
+  for (const doc of [SOP_STAFF_DOC, SOP_ADMIN_DOC]) {
+    const serialized = JSON.stringify(doc)
+    assert.equal(serialized.includes("\u2014"), false)
+    for (const ch of doc.chapters) {
+      assert.ok(ch.purpose.length > 10)
+      assert.ok(ch.steps.length >= 2)
+      assert.ok(ch.mandatoryRules.length >= 1)
+      assert.ok(ch.quickFixes.length >= 1)
+    }
+  }
+
+  const staffUnder100 = filterSopChapters(SOP_STAFF_DOC.chapters, "100%")
+  assert.ok(
+    staffUnder100.some((ch) => ch.id === "staf-bab-3-laporan-triwulan"),
+  )
+
+  const staffStatusTable = SOP_STAFF_DOC.chapters.find(
+    (ch) => ch.id === "staf-bab-4-riwayat-revisi-unduh",
+  )
+  assert.deepEqual(
+    staffStatusTable?.statusTable?.map((r) => r.status),
+    ["Draf", "Menunggu", "Revisi", "Disetujui"],
+  )
+
+  const adminExports = SOP_ADMIN_DOC.chapters.find(
+    (ch) => ch.id === "admin-bab-5-arsip-rekap-master",
+  )
+  assert.deepEqual(
+    adminExports?.exportTable?.map((r) => r.extension),
+    [".xlsx", ".zip", ".csv"],
+  )
+  assert.equal(
+    filterSopChapters(SOP_ADMIN_DOC.chapters, "kata-kunci-tidak-ada").length,
+    0,
+  )
+})
+
+test("Master Recap .xlsx and Unit Package .zip builders produce valid PKZIP containers", () => {
+  const sampleRecords = [
+    {
+      id: "SK-2026-FKET",
+      type: "Sasaran Kinerja",
+      title: "Sasaran Kinerja Tahun 2026",
+      period: "Tahun 2026",
+      unit: "FKET",
+      parentUnit: "FKET",
+      subUnit: "FKET",
+      sentAt: "10/01/2026, 09.00.00",
+      status: "Disetujui",
+      progress: 100,
+      items: [],
+      criteriaData: [
+        {
+          id: "c1",
+          name: "Pendidikan",
+          strategy: {
+            id: "s1",
+            name: "Mutu Prodi",
+            programs: [
+              {
+                id: "p1",
+                name: "Akreditasi",
+                targets: [
+                  {
+                    id: "t1",
+                    target: "Unggul",
+                    monthStart: "2026-01",
+                    monthEnd: "2026-06",
+                    notes: "-",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: "LTR-2026-I-BPK",
+      type: "Laporan Triwulan",
+      title: "Laporan Realisasi Triwulan I",
+      period: "Triwulan I · 2026",
+      unit: "BPK",
+      parentUnit: "PRP",
+      subUnit: "BPK",
+      sentAt: "05/04/2026, 14.30.00",
+      status: "Menunggu",
+      progress: 100,
+      items: [],
+      triwulanPrograms: [
+        {
+          id: "tp1",
+          program: "Evaluasi Anggaran",
+          sasaranList: [
+            {
+              ...createEmptyTriwulanSasaran("ts1"),
+              target: "Monitoring RKA",
+              monthStart: "2026-01",
+              monthEnd: "2026-03",
+              stage: "Kompilasi",
+              realization: "80% unit terkumpul",
+              percentage: "80",
+              obstacle: "2 unit belum lengkap",
+              solution: "Pendampingan teknis",
+              solutionTime: "2026-04-15",
+              evidence: "https://drive.google.com/example",
+            },
+          ],
+        },
+      ],
+    },
+  ]
+
+  const xlsxBytes = buildMasterWorkbookBytes(sampleRecords, "2026", "")
+  assert.equal(xlsxBytes[0], 0x50)
+  assert.equal(xlsxBytes[1], 0x4b)
+  assert.equal(xlsxBytes[2], 0x03)
+  assert.equal(xlsxBytes[3], 0x04)
+  const xlsxText = new TextDecoder().decode(xlsxBytes)
+  assert.ok(xlsxText.includes("Ringkasan 42 Unit"))
+  assert.ok(xlsxText.includes("Daftar Dokumen"))
+  assert.ok(xlsxText.includes("Rincian Triwulan"))
+  assert.ok(xlsxText.includes("Rincian Sasaran RKA"))
+  assert.ok(xlsxText.includes("Perpustakaan"))
+
+  const zipBytes = buildUnitPackageZipBytes(sampleRecords, "2026", "")
+  assert.equal(zipBytes[0], 0x50)
+  assert.equal(zipBytes[1], 0x4b)
+  const zipText = new TextDecoder().decode(zipBytes)
+  assert.ok(zipText.includes("00_Indeks_Arsip_SIPETRI.csv"))
+  assert.ok(zipText.includes("FKET/SK-2026-FKET_Sasaran_Kinerja.csv"))
+  assert.ok(zipText.includes("PRP/BPK/LTR-2026-I-BPK_Laporan_Triwulan.csv"))
 })

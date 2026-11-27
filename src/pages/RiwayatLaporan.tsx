@@ -222,6 +222,7 @@ export function RiwayatLaporan({
           </p>
         </div>
         <button
+          type="button"
           className="history-help"
           onClick={() =>
             notify(

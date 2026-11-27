@@ -1,0 +1,1276 @@
+/* SOP Operational Reader & Official A4 Portrait Print Sheet */
+.sop-guide-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1030;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(16, 32, 66, 0.5);
+  backdrop-filter: blur(4px);
+}
+
+.sop-guide-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(1040px, 96vw);
+  height: min(88dvh, 820px);
+  max-height: 90dvh;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #d5dfec;
+  border-radius: 16px;
+  background: #ffffff;
+  color: #17213a;
+  font-family: 'DM Sans', sans-serif;
+  box-shadow: 0 24px 64px rgba(16, 27, 51, 0.26);
+  text-align: left;
+}
+
+.sop-guide-dialog button:focus-visible,
+.sop-guide-dialog input:focus-visible,
+.sop-guide-dialog a:focus-visible,
+.sop-print-preview button:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+.sop-guide-head {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 22px 15px;
+  border-bottom: 1px solid #e4eaf2;
+  background: #ffffff;
+}
+
+.sop-guide-head-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  min-width: 0;
+  flex: 1;
+}
+
+.sop-guide-head-icon {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  border: 1px solid #cfe0fb;
+  background: #eaf2ff;
+  color: #163d7a;
+}
+
+.sop-guide-head-copy {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 4px;
+}
+
+.sop-guide-kicker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sop-guide-role-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  border: 1px solid #bfd4f8;
+  background: #edf4ff;
+  color: #163d7a;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.sop-guide-role-pill.is-admin {
+  border-color: #c7d2fe;
+  background: #eef2ff;
+  color: #1e3a8a;
+}
+
+.sop-guide-doc-meta {
+  color: #475569;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.sop-guide-head-copy h2 {
+  margin: 0;
+  color: #162a52;
+  font-family: 'Manrope', sans-serif;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.sop-guide-head-copy p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.sop-guide-head-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+}
+
+.sop-guide-close {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #738099;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.sop-guide-close:hover {
+  background: #f1f5f9;
+  color: #162a52;
+}
+
+.sop-guide-toolbar {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 11px 22px;
+  border-bottom: 1px solid #e4eaf2;
+  background: #f8fafd;
+}
+
+.sop-search-box {
+  position: relative;
+  flex: 1 1 280px;
+  max-width: 460px;
+  display: flex;
+  align-items: center;
+}
+
+.sop-search-icon {
+  position: absolute;
+  left: 12px;
+  color: #475569;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+}
+
+.sop-search-box input {
+  width: 100%;
+  height: 40px;
+  padding: 0 36px 0 36px;
+  border: 1px solid #738099;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #17213a;
+  font-size: 13px;
+}
+
+.sop-search-box input::placeholder {
+  color: #526176;
+}
+
+.sop-search-box input:focus {
+  outline: 0;
+  border-color: #2864ca;
+  box-shadow: 0 0 0 3px #e8f0fd;
+}
+
+.sop-search-clear {
+  position: absolute;
+  right: 5px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #475569;
+  font-size: 17px;
+  line-height: 1;
+}
+
+.sop-search-clear:hover {
+  background: #e2e8f0;
+  color: #17213a;
+}
+
+.sop-pdf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sop-pdf-btn {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid #738099;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17213a;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sop-pdf-btn:hover {
+  border-color: #2864ca;
+  background: #edf4ff;
+  color: #163d7a;
+}
+
+.sop-pdf-btn.is-primary {
+  border-color: #1e4b91;
+  background: #1e4b91;
+  color: #ffffff;
+}
+
+.sop-pdf-btn.is-primary:hover {
+  border-color: #163a72;
+  background: #163a72;
+  color: #ffffff;
+}
+
+.sop-guide-workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 252px minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.sop-toc-rail {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 14px;
+  border-right: 1px solid #e4eaf2;
+  background: #f8fafd;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sop-toc-heading {
+  padding: 0 6px;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sop-toc-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+
+.sop-toc-btn {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: #334155;
+  text-align: left;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sop-toc-btn:hover {
+  background: #eef4fc;
+  color: #162a52;
+}
+
+.sop-toc-btn.is-active {
+  border-color: #2864ca;
+  background: #e8f0fd;
+  color: #163d7a;
+}
+
+.sop-toc-num {
+  font-size: 11px;
+  font-weight: 800;
+  color: #1e4b91;
+}
+
+.sop-toc-btn.is-active .sop-toc-num {
+  color: #163d7a;
+}
+
+.sop-toc-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.sop-reader-pane {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  scroll-behavior: smooth;
+}
+
+.sop-reader-pane > * {
+  flex: none;
+}
+
+.sop-chapter-card {
+  border: 1px solid #dce4ef;
+  border-radius: 13px;
+  background: #ffffff;
+  scroll-margin-top: 12px;
+}
+
+.sop-chapter-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px 18px;
+  border-radius: 12px 12px 0 0;
+  border-bottom: 1px solid #e5ebf3;
+  background: #f6f9fe;
+}
+
+.sop-chapter-badge {
+  flex: none;
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: #162a52;
+  color: #ffffff;
+  font-family: 'Manrope', sans-serif;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.sop-chapter-title-wrap {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 3px;
+}
+
+.sop-chapter-title-wrap h3 {
+  margin: 0;
+  color: #162a52;
+  font-family: 'Manrope', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.sop-chapter-menu-ref {
+  color: #1e4b91;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sop-chapter-body {
+  padding: 16px 18px;
+  display: grid;
+  gap: 16px;
+}
+
+.sop-section-block {
+  display: grid;
+  gap: 8px;
+}
+
+.sop-section-label {
+  margin: 0;
+  color: #162a52;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.sop-purpose-text {
+  margin: 0;
+  padding: 10px 13px;
+  border-radius: 9px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.sop-steps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.sop-steps-list li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e6ecf4;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.sop-step-index {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: #e8f0fd;
+  color: #163d7a;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sop-mandatory-callout {
+  padding: 13px 15px;
+  border: 1px solid #e5b85c;
+  border-radius: 10px;
+  background: #fffbeb;
+  display: grid;
+  gap: 8px;
+}
+
+.sop-mandatory-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #714304;
+}
+
+.sop-mandatory-mark {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: #9a5b08;
+  color: #ffffff;
+  font-family: 'Manrope', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sop-mandatory-head h4 {
+  margin: 0;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  color: #714304;
+}
+
+.sop-mandatory-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: #5c3906;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.sop-ref-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #dbe3ee;
+  border-radius: 10px;
+}
+
+.sop-ref-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 520px;
+  font-size: 12.5px;
+}
+
+.sop-ref-table th,
+.sop-ref-table td {
+  padding: 9px 11px;
+  border-bottom: 1px solid #e4eaf2;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.48;
+  color: #1e293b;
+}
+
+.sop-ref-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.sop-ref-table th {
+  background: #eef3fa;
+  color: #162a52;
+  font-family: 'Manrope', sans-serif;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.sop-status-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sop-status-pill.is-draf {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.sop-status-pill.is-menunggu {
+  background: #fffbeb;
+  color: #714304;
+  border: 1px solid #f2cf8d;
+}
+
+.sop-status-pill.is-revisi {
+  background: #fff1f2;
+  color: #8f1d27;
+  border: 1px solid #fecdd3;
+}
+
+.sop-status-pill.is-disetujui {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.sop-ext-pill {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #e8f0fd;
+  color: #163d7a;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sop-fixes-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.sop-fix-item {
+  padding: 10px 13px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #f8fafc;
+  display: grid;
+  gap: 4px;
+}
+
+.sop-fix-item strong {
+  color: #162a52;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.sop-fix-item p {
+  margin: 0;
+  color: #334155;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.sop-empty-search {
+  padding: 32px 20px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.sop-empty-search strong {
+  color: #162a52;
+  font-family: 'Manrope', sans-serif;
+  font-size: 15px;
+}
+
+.sop-empty-search p {
+  margin: 0;
+  color: #475569;
+  font-size: 13px;
+}
+
+.sop-guide-footer {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 22px;
+  border-top: 1px solid #e4eaf2;
+  background: #ffffff;
+}
+
+.sop-guide-footer-meta {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sop-guide-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Annual import bar on InputLaporanTriwulan */
+.annual-import-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 13px 16px;
+  border: 1px solid #cfe0fb;
+  border-radius: 12px;
+  background: #f4f8ff;
+}
+
+.annual-import-copy {
+  min-width: 0;
+  flex: 1 1 260px;
+  display: grid;
+  gap: 2px;
+}
+
+.annual-import-copy strong {
+  color: #162a52;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.annual-import-copy span {
+  color: #334155;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.annual-import-btn {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border: 1px solid #1e4b91;
+  border-radius: 9px;
+  background: #1e4b91;
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.annual-import-btn:hover:not(:disabled) {
+  background: #163a72;
+  border-color: #163a72;
+}
+
+.annual-import-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Master Recap Export Dropdown in Admin Archive */
+.admin-master-export {
+  position: relative;
+  flex: none;
+}
+
+.admin-master-export-trigger {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 15px;
+  border: 1px solid #1e4b91 !important;
+  border-radius: 9px !important;
+  background: #1e4b91 !important;
+  color: #ffffff !important;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.admin-master-export-trigger:hover:not(:disabled) {
+  background: #163a72 !important;
+}
+
+.admin-master-export-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-master-export-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 50;
+  width: min(340px, calc(100vw - 32px));
+  padding: 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 16px 38px rgba(16, 36, 77, 0.18);
+  display: grid;
+  gap: 4px;
+}
+
+.admin-master-export-item {
+  width: 100%;
+  min-height: 48px;
+  display: grid !important;
+  gap: 2px;
+  padding: 9px 12px !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  background: #ffffff !important;
+  color: #17213a !important;
+  text-align: left;
+}
+
+.admin-master-export-item:hover,
+.admin-master-export-item:focus-visible {
+  border-color: #bfd4f8 !important;
+  background: #f0f6ff !important;
+}
+
+.admin-master-export-item strong {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #162a52;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.admin-master-export-item small {
+  color: #475569;
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+/* Official A4 Portrait SOP Print Preview Sheet */
+.print-preview.sop-print-preview {
+  z-index: 1100;
+}
+
+.sop-print-canvas {
+  overflow: auto;
+}
+
+.sop-print-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sop-print-sheet {
+  width: 794px;
+  min-height: 1123px;
+  padding: 30px 36px 28px;
+  font-family: Arial, sans-serif;
+  color: #111827;
+}
+
+.sop-print-banner {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1.5px solid #111827;
+  background: #f8fafc;
+  text-align: center;
+  display: grid;
+  gap: 4px;
+}
+
+.sop-print-doc-code {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #1e3a8a;
+}
+
+.sop-print-banner h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.sop-print-banner p {
+  margin: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.sop-print-meta-table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+}
+
+.sop-print-meta-table th,
+.sop-print-meta-table td {
+  padding: 5px 8px;
+  border: 1px solid #334155;
+  font-size: 9.5px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.sop-print-meta-table th {
+  width: 18%;
+  background: #eef2f6;
+  font-weight: 700;
+  color: #111827;
+}
+
+.sop-print-toc {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid #475569;
+  background: #ffffff;
+}
+
+.sop-print-toc h3 {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.sop-print-toc ol {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3px;
+  font-size: 9.8px;
+}
+
+.sop-print-toc span {
+  color: #334155;
+}
+
+.sop-print-chapters {
+  margin-top: 14px;
+  display: grid;
+  gap: 14px;
+}
+
+.sop-print-chapter {
+  border: 1px solid #334155;
+  padding: 11px 13px;
+  display: grid;
+  gap: 9px;
+}
+
+.sop-print-chapter-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid #94a3b8;
+}
+
+.sop-print-chapter-num {
+  padding: 3px 8px;
+  background: #162a52;
+  color: #ffffff;
+  font-size: 9.5px;
+  font-weight: 800;
+}
+
+.sop-print-chapter-head h3 {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.sop-print-chapter-menu {
+  font-size: 9.2px;
+  font-weight: 700;
+  color: #1e3a8a;
+}
+
+.sop-print-block {
+  display: grid;
+  gap: 4px;
+}
+
+.sop-print-block h4,
+.sop-print-callout h4 {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 800;
+  color: #111827;
+}
+
+.sop-print-block p {
+  margin: 0;
+  font-size: 9.6px;
+  line-height: 1.45;
+}
+
+.sop-print-steps,
+.sop-print-fixes {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3.5px;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.sop-print-callout {
+  padding: 8px 10px;
+  border: 1px solid #9a5b08;
+  background: #fffbeb;
+  display: grid;
+  gap: 4px;
+}
+
+.sop-print-callout ul {
+  margin: 0;
+  padding-left: 17px;
+  display: grid;
+  gap: 3px;
+  font-size: 9.4px;
+  line-height: 1.42;
+}
+
+.sop-print-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 2px;
+}
+
+.sop-print-data-table th,
+.sop-print-data-table td {
+  padding: 4.5px 6px;
+  border: 1px solid #334155;
+  font-size: 9px;
+  line-height: 1.38;
+  text-align: left;
+  vertical-align: top;
+}
+
+.sop-print-data-table th {
+  background: #eef2f6;
+  font-weight: 800;
+}
+
+.sop-print-contact {
+  margin-top: 14px;
+  padding: 9px 12px;
+  border: 1px solid #334155;
+  background: #f8fafc;
+  font-size: 9.5px;
+  line-height: 1.45;
+}
+
+.sop-print-contact p {
+  margin: 2px 0 0;
+}
+
+/* Override #root .app-shell inherited 13px cascade cleanly */
+#root .app-shell .sop-guide-dialog h2 {
+  font-family: 'Manrope', sans-serif;
+  font-size: 19px;
+}
+
+#root .app-shell .sop-guide-dialog .sop-chapter-title-wrap h3 {
+  font-family: 'Manrope', sans-serif;
+  font-size: 16px;
+}
+
+#root .app-shell .sop-guide-dialog .sop-section-label,
+#root .app-shell .sop-guide-dialog .sop-mandatory-head h4 {
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+}
+
+#root .app-shell .sop-guide-dialog :is(.sop-purpose-text, .sop-steps-list li, .sop-search-box input) {
+  font-size: 13px;
+}
+
+#root .app-shell .sop-guide-dialog :is(.sop-mandatory-list, .sop-ref-table, .sop-fix-item strong, .sop-fix-item p, .sop-pdf-btn, .sop-toc-title) {
+  font-size: 12.5px;
+}
+
+#root .app-shell .sop-guide-dialog :is(.sop-guide-role-pill, .sop-guide-doc-meta, .sop-toc-heading, .sop-toc-num, .sop-chapter-badge, .sop-chapter-menu-ref, .sop-status-pill, .sop-guide-footer-meta) {
+  font-size: 11.5px;
+}
+
+#root .app-shell .sop-print-sheet,
+#root .app-shell .sop-print-sheet * {
+  font-size: 10px;
+}
+
+#root .app-shell .sop-print-sheet .letterhead-copy h1 {
+  font-size: 20px;
+}
+
+#root .app-shell .sop-print-sheet .sop-print-banner h2 {
+  font-size: 14px;
+}
+
+#root .app-shell .sop-print-sheet .sop-print-chapter-head h3 {
+  font-size: 12px;
+}
+
+/* Tablet state (641px to 920px): collapse 2-column into horizontal chapter jump-bar */
+@media (max-width: 920px) {
+  .sop-guide-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .sop-toc-rail {
+    border-right: 0;
+    border-bottom: 1px solid #e4eaf2;
+    padding: 10px 16px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 6px;
+  }
+
+  .sop-toc-heading {
+    display: none;
+  }
+
+  .sop-toc-list {
+    display: flex;
+    gap: 6px;
+    width: max-content;
+  }
+
+  .sop-toc-btn {
+    width: auto;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-color: #d5dfec;
+    background: #ffffff;
+    white-space: nowrap;
+  }
+}
+
+/* Phone state (<= 640px): full-width comfort, >=44px tap targets, compact chrome */
+@media (max-width: 640px) {
+  .sop-guide-overlay {
+    padding: 6px;
+  }
+
+  .sop-guide-dialog {
+    width: 100%;
+    height: 95dvh;
+    max-height: 95dvh;
+    border-radius: 14px;
+  }
+
+  .sop-guide-head {
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px 10px;
+  }
+
+  .sop-guide-head-icon,
+  .sop-guide-head-copy p {
+    display: none;
+  }
+
+  .sop-guide-head-copy h2,
+  #root .app-shell .sop-guide-dialog h2 {
+    font-size: 16.5px;
+  }
+
+  .sop-guide-head-right {
+    width: auto;
+    justify-content: flex-end;
+  }
+
+  .sop-guide-close {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .sop-guide-toolbar {
+    gap: 8px;
+    padding: 8px 14px;
+  }
+
+  .sop-search-box {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .sop-search-box input {
+    height: 44px;
+  }
+
+  .sop-search-clear {
+    width: 38px;
+    height: 38px;
+  }
+
+  .sop-pdf-actions {
+    width: 100%;
+    display: flex;
+  }
+
+  .sop-pdf-btn {
+    width: 100%;
+    min-height: 44px;
+    padding: 6px 12px;
+    justify-content: center;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+  }
+
+  .sop-toc-rail {
+    padding: 8px 14px;
+  }
+
+  .sop-toc-btn {
+    min-height: 44px;
+  }
+
+  .sop-reader-pane {
+    padding: 14px 14px 18px;
+    gap: 16px;
+  }
+
+  .sop-chapter-head,
+  .sop-chapter-body {
+    padding: 13px 14px;
+  }
+
+  .sop-steps-list li {
+    grid-template-columns: 24px minmax(0, 1fr);
+    padding: 9px 10px;
+  }
+
+  .sop-guide-footer {
+    flex-wrap: nowrap;
+    padding: 8px 14px;
+  }
+
+  .sop-guide-footer-meta {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .sop-guide-footer-actions {
+    width: auto;
+    flex: none;
+  }
+
+  .sop-guide-footer-actions button {
+    min-height: 44px;
+    padding: 0 14px;
+    justify-content: center;
+    white-space: nowrap;
+  }
+
+  .annual-import-btn {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+}
+
+@page sop-portrait {
+  size: A4 portrait;
+  margin: 11mm 13mm;
+}
+
+@media print {
+  .sop-print-sheet {
+    page: sop-portrait;
+    width: auto !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  .sop-print-callout,
+  .sop-print-data-table tr,
+  .sop-print-meta-table tr,
+  .sop-print-contact,
+  .sop-print-toc {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .sop-print-chapter-head,
+  .sop-print-block h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}

@@ -9,10 +9,14 @@ export type PortalLinkCard = {
   title: string
   description: string
   delayMs: number
-  kind: "login" | "external" | "mailto" | "tel" | "modal-guide" | "modal-units"
+  kind: "login" | "external" | "mailto" | "tel" | "section" | "modal-units"
   href?: string
-  guideTab?: "staff" | "admin"
   icon: "globe" | "lock" | "report" | "grid" | "mail" | "phone"
+}
+
+export type PortalServiceCard = {
+  title: string
+  detail: string
 }
 
 export type PortalFaqItem = {
@@ -61,13 +65,13 @@ export const PORTAL_FEATURED_ACCESS: PortalLinkCard = {
 
 export const PORTAL_SUPPORT_LINKS: PortalLinkCard[] = [
   {
-    id: "panduan-staf",
-    title: "Panduan Pelaporan Staf",
+    id: "layanan-pelaporan",
+    title: "Layanan & Siklus Pelaporan",
     description:
-      "Alur pengisian RKA, impor program triwulan, dan tindak lanjut revisi",
+      "Gambaran umum tahapan RKA tahunan, pelaporan triwulanan, dan arsip kinerja",
     delayMs: 50,
-    kind: "modal-guide",
-    guideTab: "staff",
+    kind: "section",
+    href: "#layanan",
     icon: "report",
   },
   {
@@ -154,16 +158,16 @@ export const PORTAL_FAQ_CATEGORIES: PortalFaqCategory[] = [
       },
       {
         id: "faq-alur-revisi",
-        question: "Bagaimana alur perbaikan jika dokumen berstatus Revisi?",
+        question: "Di mana pengguna dapat melihat panduan lengkap dan SOP penggunaan SIPETRI?",
         answer:
-          "Jika Admin PRP mengembalikan dokumen dengan catatan per indikator, staf akan menerima pemberitahuan di ikon lonceng dan dapat membuka menu Riwayat. Klik Perbaiki pada dokumen berstatus Revisi untuk memperbarui isian sambil melihat catatan pemeriksa, lalu kirim ulang selama periode masih dibuka.",
+          "Panduan langkah kerja dan SOP operasional dipisah khusus berdasarkan peran akun agar lebih aman dan fokus. Setelah masuk ke aplikasi, klik ikon profil akun Anda lalu pilih menu Panduan & SOP.",
       },
       {
         id: "faq-tenggat-wib",
         question:
           "Zona waktu apa yang dipakai untuk batas akhir pengumpulan laporan?",
         answer:
-          "Seluruh jadwal mulai dan tenggat akhir pengumpulan dihitung secara ketat berdasarkan kalender Asia/Jakarta (WIB, UTC+07:00). Pengumpulan baru diperbolehkan hingga pukul 23:59:59 WIB pada tanggal tenggat yang ditetapkan oleh Admin PRP.",
+          "Seluruh jadwal mulai dan tenggat akhir pengumpulan dihitung berdasarkan kalender resmi Asia/Jakarta (WIB, UTC+07:00) hingga pukul 23:59:59 WIB pada tanggal tenggat.",
       },
     ],
   },
@@ -173,9 +177,9 @@ export const PORTAL_FAQ_CATEGORIES: PortalFaqCategory[] = [
       {
         id: "faq-cetak-excel",
         question:
-          "Apakah laporan di SIPETRI dapat dicetak ke PDF atau diekspor ke Excel?",
+          "Apakah laporan kinerja di SIPETRI dapat dicetak ke PDF atau diekspor ke spreadsheet?",
         answer:
-          "Bisa. Sebelum maupun sesudah pengiriman, pengguna dapat membuka Pratinjau Cetak resmi berformat A4 Landscape lengkap dengan kop surat ITPLN dan kolom tanda tangan untuk disimpan sebagai PDF, serta mengekspor rincian laporan ke berkas Excel.",
+          "Bisa. Dokumen pelaporan dan dokumen SOP operasional sesuai peran akun masing-masing dilengkapi pratinjau cetak berkop resmi ITPLN untuk disimpan sebagai PDF maupun ekspor data tabel ke spreadsheet.",
       },
       {
         id: "faq-autosave-draf",
@@ -201,49 +205,25 @@ export const PORTAL_GOVERNANCE_FACTS = [
   { label: "Format Dokumen Resmi", value: "Pratinjau A4 Landscape & Excel" },
 ]
 
-export const PORTAL_GUIDE_STEPS = {
-  staff: [
-    {
-      title: "1. Sasaran Kinerja Tahunan (RKA)",
-      detail:
-        "Lengkapi target program dan sasaran kerja pada menu Isi Sasaran Kinerja, lalu pilih Unit Utama dan Sub Unit / Bagian pada formulir.",
-    },
-    {
-      title: "2. Laporan Realisasi Triwulan",
-      detail:
-        "Isi realisasi setiap triwulan atau impor langsung program dari Sasaran Kinerja. Realisasi di bawah 100% wajib melengkapi Kendala, Rencana Penyelesaian, dan Waktu Penyelesaian.",
-    },
-    {
-      title: "3. Pratinjau & Konfirmasi Kirim",
-      detail:
-        "Periksa kembali hasil input pada tampilan Pratinjau sebelum mengirim dokumen secara permanen ke antrean verifikasi Admin PRP.",
-    },
-    {
-      title: "4. Notifikasi & Perbaikan Revisi",
-      detail:
-        "Pantau lonceng notifikasi dan buka menu Riwayat. Dokumen berstatus Revisi dapat diperbarui melalui tombol Perbaiki selama periode pelaporan masih dibuka.",
-    },
-  ],
-  admin: [
-    {
-      title: "1. Pemantauan Kepatuhan Unit",
-      detail:
-        "Buka Dashboard Monitoring untuk melihat progres pelaporan seluruh 42 unit kerja dan memfilter status dokumen per periode.",
-    },
-    {
-      title: "2. Verifikasi & Catatan Revisi",
-      detail:
-        "Masuk ke Verifikasi Laporan Triwulan atau Verifikasi Sasaran Kinerja. Saat meminta revisi, tulis catatan pada indikator terkait agar langsung terbaca oleh unit.",
-    },
-    {
-      title: "3. Pengaturan Periode & Tenggat",
-      detail:
-        "Kelola tanggal mulai, tenggat akhir, serta status buka/tutup pengumpulan pada Periode dan Tenggat Waktu. Perubahan jadwal otomatis memberi notifikasi ke seluruh unit.",
-    },
-    {
-      title: "4. Arsip & Ekspor Rekapitulasi",
-      detail:
-        "Gunakan Arsip dan Rekapitulasi untuk meninjau riwayat lintas tahun, mencetak pratinjau resmi, atau mengekspor rekap Excel.",
-    },
-  ],
-}
+export const PORTAL_SERVICE_CARDS: PortalServiceCard[] = [
+  {
+    title: "Perencanaan Sasaran Tahunan (RKA)",
+    detail:
+      "Penyusunan program kerja tahunan tiap unit kerja yang mencakup kriteria, strategi, sasaran kinerja, dan jadwal bulan pelaksanaan.",
+  },
+  {
+    title: "Pelaporan Realisasi Triwulanan",
+    detail:
+      "Pencatatan progres capaian Triwulan I hingga Triwulan IV secara periodik lengkap dengan persentase realisasi dan tautan bukti dukung.",
+  },
+  {
+    title: "Penjaminan Mutu & Dokumentasi",
+    detail:
+      "Proses pemeriksaan terstruktur dengan catatan riwayat yang terdokumentasi per indikator untuk menjaga akuntabilitas laporan.",
+  },
+  {
+    title: "Ketertiban Jadwal WIB & Arsip Resmi",
+    detail:
+      "Pengendalian periode pelaporan berbasis kalender Asia/Jakarta (WIB) serta arsip cetak berformat resmi Institut Teknologi PLN.",
+  },
+]

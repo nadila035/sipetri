@@ -8,9 +8,9 @@ import {
   PORTAL_FEATURED_ACCESS,
   PORTAL_GOVERNANCE_FACTS,
   PORTAL_GOVERNANCE_POINTS,
-  PORTAL_GUIDE_STEPS,
   PORTAL_INSTITUTION,
   PORTAL_NAV_LINKS,
+  PORTAL_SERVICE_CARDS,
   PORTAL_SUPPORT_LINKS,
   type PortalLinkCard,
 } from "./portalContent"
@@ -35,7 +35,6 @@ function PortalGlyph({
   | "menu"
   | "mapPin"
   | "arrowUp"
-  | "book"
   size?: number
 }) {
   return (
@@ -103,122 +102,7 @@ function PortalGlyph({
         </>
       )}
       {name === "arrowUp" && <path d="M12 19V5M5 12l7-7 7 7" />}
-      {name === "book" && (
-        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-      )}
     </svg>
-  )
-}
-
-function PortalGuideModal({
-  open,
-  tab,
-  onChangeTab,
-  onClose,
-  onEnterLogin,
-}: {
-  open: boolean
-  tab: "staff" | "admin"
-  onChangeTab: (tab: "staff" | "admin") => void
-  onClose: () => void
-  onEnterLogin: () => void
-}) {
-  useDialog(open, onClose, ".portal-guide-modal")
-  if (!open) return null
-
-  const steps = PORTAL_GUIDE_STEPS[tab]
-
-  return (
-    <div
-      className="portal-modal-overlay portal-guide-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="portal-guide-title"
-    >
-      <div className="portal-modal-dialog">
-        <div className="portal-modal-head">
-          <div>
-            <h2 id="portal-guide-title">Panduan Alur Pelaporan SIPETRI</h2>
-            <p>
-              Ringkasan langkah penggunaan resmi sesuai peran pengguna di
-              Institut Teknologi PLN.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="portal-modal-close"
-            aria-label="Tutup panduan pelaporan"
-            onClick={onClose}
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="portal-modal-tabs" role="tablist" aria-label="Pilih peran">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "staff"}
-            className={tab === "staff" ? "is-active" : undefined}
-            onClick={() => onChangeTab("staff")}
-          >
-            Staf Unit / Bagian
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "admin"}
-            className={tab === "admin" ? "is-active" : undefined}
-            onClick={() => onChangeTab("admin")}
-          >
-            Admin PRP
-          </button>
-        </div>
-
-        <div className="portal-modal-body">
-          <ol className="portal-guide-steps">
-            {steps.map((step) => (
-              <li key={step.title}>
-                <strong>{step.title}</strong>
-                <p>{step.detail}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
-
-        <div className="portal-modal-foot">
-          <span>
-            {PORTAL_INSTITUTION.shortName} · {PORTAL_INSTITUTION.version}
-          </span>
-          <div className="portal-modal-foot-actions">
-            <button
-              type="button"
-              className="portal-modal-sec-btn"
-              onClick={onClose}
-            >
-              Tutup
-            </button>
-            <button
-              type="button"
-              className="portal-modal-pri-btn"
-              onClick={() => {
-                onClose()
-                onEnterLogin()
-              }}
-            >
-              Masuk Aplikasi
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        className="overlay-close"
-        aria-label="Tutup jendela panduan"
-        onClick={onClose}
-      />
-    </div>
   )
 }
 
@@ -346,16 +230,10 @@ function PortalUnitsModal({
 
 export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null)
-  const dropdownRef = useRef<HTMLLIElement>(null)
   const [scrolled, setScrolled] = useState(false)
   const [activeNav, setActiveNav] = useState("beranda")
-  const [dropdownOpen, setDropdownOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [mobilePanduanOpen, setMobilePanduanOpen] = useState(false)
-  const [workflowTab, setWorkflowTab] = useState<"staff" | "admin">("staff")
   const [openFaqId, setOpenFaqId] = useState<string | null>(null)
-  const [guideModalOpen, setGuideModalOpen] = useState(false)
-  const [guideTab, setGuideTab] = useState<"staff" | "admin">("staff")
   const [unitsModalOpen, setUnitsModalOpen] = useState(false)
 
   usePortalMotion(rootRef)
@@ -387,30 +265,7 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
     }
   }, [])
 
-  useEffect(() => {
-    const handleOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setDropdownOpen(false)
-      }
-    }
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setDropdownOpen(false)
-      }
-    }
-    document.addEventListener("mousedown", handleOutside)
-    document.addEventListener("keydown", handleKey)
-    return () => {
-      document.removeEventListener("mousedown", handleOutside)
-      document.removeEventListener("keydown", handleKey)
-    }
-  }, [])
-
   const scrollToSection = (sectionId: string) => {
-    setDropdownOpen(false)
     setMobileMenuOpen(false)
     if (sectionId === "beranda") {
       window.scrollTo({ top: 0, behavior: "smooth" })
@@ -424,15 +279,7 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
     window.scrollTo({ top, behavior: "smooth" })
   }
 
-  const openGuideModal = (tab: "staff" | "admin") => {
-    setDropdownOpen(false)
-    setMobileMenuOpen(false)
-    setGuideTab(tab)
-    setGuideModalOpen(true)
-  }
-
   const openUnitsModal = () => {
-    setDropdownOpen(false)
     setMobileMenuOpen(false)
     setUnitsModalOpen(true)
   }
@@ -482,8 +329,8 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
         data-reveal-delay={card.delayMs}
         onClick={() => {
           if (card.kind === "login") onEnterLogin()
-          else if (card.kind === "modal-guide")
-            openGuideModal(card.guideTab ?? "staff")
+          else if (card.kind === "section" && card.href)
+            scrollToSection(card.href.replace(/^#/, ""))
           else if (card.kind === "modal-units") openUnitsModal()
         }}
       >
@@ -491,8 +338,6 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
       </button>
     )
   }
-
-  const activeSteps = PORTAL_GUIDE_STEPS[workflowTab]
 
   return (
     <div className="portal-page" ref={rootRef}>
@@ -518,129 +363,7 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
 
           <nav className="portal-nav" aria-label="Navigasi Portal">
             <ul className="portal-nav-list">
-              <li className="portal-nav-item">
-                <a
-                  href="#beranda"
-                  className={
-                    activeNav === "beranda"
-                      ? "portal-nav-link is-active"
-                      : "portal-nav-link"
-                  }
-                  onClick={(e) => {
-                    e.preventDefault()
-                    scrollToSection("beranda")
-                  }}
-                >
-                  Beranda
-                </a>
-              </li>
-
-              <li
-                ref={dropdownRef}
-                className={`portal-nav-item is-dropdown${dropdownOpen ? " is-open" : ""}`}
-                onBlur={(e) => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                    setDropdownOpen(false)
-                  }
-                }}
-              >
-                <button
-                  type="button"
-                  className="portal-nav-dropdown-trigger"
-                  aria-expanded={dropdownOpen}
-                  aria-haspopup="true"
-                  onClick={() => setDropdownOpen((prev) => !prev)}
-                >
-                  <span>Panduan</span>
-                  <span className="portal-nav-caret" aria-hidden="true">
-                    <PortalGlyph name="chevronDown" size={14} />
-                  </span>
-                </button>
-                <ul className="portal-dropdown-menu">
-                  <li className="portal-dropdown-subitem">
-                    <button
-                      type="button"
-                      className="portal-dropdown-btn"
-                      onClick={() => openGuideModal("staff")}
-                    >
-                      <span>Alur Pelaporan Staf</span>
-                      <PortalGlyph name="chevronRight" size={14} />
-                    </button>
-                    <ul className="portal-submenu">
-                      <li>
-                        <button
-                          type="button"
-                          className="portal-dropdown-btn"
-                          onClick={() => openGuideModal("staff")}
-                        >
-                          1. Sasaran Kinerja Tahunan (RKA)
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          className="portal-dropdown-btn"
-                          onClick={() => openGuideModal("staff")}
-                        >
-                          2. Laporan Realisasi Triwulan
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          className="portal-dropdown-btn"
-                          onClick={() => openGuideModal("staff")}
-                        >
-                          3. Pratinjau Cetak & Revisi
-                        </button>
-                      </li>
-                    </ul>
-                  </li>
-
-                  <li className="portal-dropdown-subitem">
-                    <button
-                      type="button"
-                      className="portal-dropdown-btn"
-                      onClick={() => openGuideModal("admin")}
-                    >
-                      <span>Alur Verifikasi Admin PRP</span>
-                      <PortalGlyph name="chevronRight" size={14} />
-                    </button>
-                    <ul className="portal-submenu">
-                      <li>
-                        <button
-                          type="button"
-                          className="portal-dropdown-btn"
-                          onClick={() => openGuideModal("admin")}
-                        >
-                          Pemantauan 42 Unit Kerja
-                        </button>
-                      </li>
-                      <li>
-                        <button
-                          type="button"
-                          className="portal-dropdown-btn"
-                          onClick={() => openGuideModal("admin")}
-                        >
-                          Pemeriksaan & Pengaturan Tenggat
-                        </button>
-                      </li>
-                    </ul>
-                  </li>
-
-                  <li>
-                    <button
-                      type="button"
-                      className="portal-dropdown-btn"
-                      onClick={openUnitsModal}
-                    >
-                      Daftar 42 Unit Kerja Pelapor
-                    </button>
-                  </li>
-                </ul>
-              </li>
-
-              {PORTAL_NAV_LINKS.slice(1).map((item) => (
+              {PORTAL_NAV_LINKS.map((item) => (
                 <li className="portal-nav-item" key={item.id}>
                   <a
                     href={item.href}
@@ -695,54 +418,7 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
             </button>
           </div>
           <div className="portal-mobile-card">
-            <a
-              href="#beranda"
-              className="portal-mobile-link"
-              onClick={(e) => {
-                e.preventDefault()
-                scrollToSection("beranda")
-              }}
-            >
-              Beranda
-            </a>
-
-            <button
-              type="button"
-              className="portal-mobile-subbtn"
-              aria-expanded={mobilePanduanOpen}
-              onClick={() => setMobilePanduanOpen((prev) => !prev)}
-            >
-              <span>Panduan & Direktori</span>
-              <PortalGlyph name="chevronDown" size={16} />
-            </button>
-
-            {mobilePanduanOpen && (
-              <div className="portal-mobile-sublist">
-                <button
-                  type="button"
-                  className="portal-mobile-link"
-                  onClick={() => openGuideModal("staff")}
-                >
-                  Alur Pelaporan Staf
-                </button>
-                <button
-                  type="button"
-                  className="portal-mobile-link"
-                  onClick={() => openGuideModal("admin")}
-                >
-                  Alur Verifikasi Admin PRP
-                </button>
-                <button
-                  type="button"
-                  className="portal-mobile-link"
-                  onClick={openUnitsModal}
-                >
-                  Daftar 42 Unit Kerja
-                </button>
-              </div>
-            )}
-
-            {PORTAL_NAV_LINKS.slice(1).map((item) => (
+            {PORTAL_NAV_LINKS.map((item) => (
               <a
                 key={item.id}
                 href={item.href}
@@ -755,6 +431,14 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
                 {item.label}
               </a>
             ))}
+
+            <button
+              type="button"
+              className="portal-mobile-link"
+              onClick={openUnitsModal}
+            >
+              Daftar 42 Unit Kerja
+            </button>
 
             <button
               type="button"
@@ -807,10 +491,10 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
                 <button
                   type="button"
                   className="portal-btn-secondary"
-                  onClick={() => openGuideModal("staff")}
+                  onClick={openUnitsModal}
                 >
-                  <PortalGlyph name="book" size={17} />
-                  <span>Panduan Alur</span>
+                  <PortalGlyph name="grid" size={17} />
+                  <span>Daftar 42 Unit</span>
                 </button>
 
                 <a
@@ -838,8 +522,8 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
               <span className="portal-kicker">Akses Cepat Portal</span>
               <h2>Pintu Masuk & Informasi Utama</h2>
               <p>
-                Pilih gerbang login aplikasi, panduan pengisian sesuai peran,
-                direktori unit pelapor, atau saluran resmi Institut Teknologi PLN.
+                Pilih gerbang login aplikasi, layanan pelaporan, direktori unit
+                pelapor, atau saluran resmi Institut Teknologi PLN.
               </p>
             </div>
 
@@ -871,7 +555,7 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
           </div>
         </section>
 
-        {/* 3. Alur Kerja & Layanan Pelaporan (role-tabbed numbered steps, distinct from FAQ accordion) */}
+        {/* 3. Alur & Layanan (institutional overview without combining Admin & Staff guides/SOP) */}
         <section id="layanan" className="portal-workflow-section">
           <div className="portal-container">
             <div
@@ -880,43 +564,19 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
             >
               <div className="portal-head-left">
                 <span className="portal-kicker">Alur & Layanan</span>
-                <h2>Tahapan Pelaporan Sesuai Peran</h2>
+                <h2>Siklus Pelaporan Kinerja SIPETRI</h2>
                 <p>
-                  Alur kerja berbeda antara staf unit pelapor dan Admin PRP
-                  dalam satu siklus tahunan hingga triwulanan.
+                  Layanan terpadu pelaporan kinerja tahunan dan triwulanan.
+                  Panduan dan SOP khusus peran tersedia di menu profil setelah
+                  masuk ke akun masing-masing.
                 </p>
-              </div>
-
-              <div
-                className="portal-role-tabs"
-                role="tablist"
-                aria-label="Pilih alur kerja peran"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={workflowTab === "staff"}
-                  className={workflowTab === "staff" ? "is-active" : undefined}
-                  onClick={() => setWorkflowTab("staff")}
-                >
-                  Staf Unit (42 Unit)
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={workflowTab === "admin"}
-                  className={workflowTab === "admin" ? "is-active" : undefined}
-                  onClick={() => setWorkflowTab("admin")}
-                >
-                  Admin PRP
-                </button>
               </div>
             </div>
 
             <div className="portal-workflow-grid">
-              {activeSteps.map((step, idx) => (
+              {PORTAL_SERVICE_CARDS.map((card, idx) => (
                 <article
-                  key={idx}
+                  key={card.title}
                   className="portal-step-card"
                   data-portal-reveal="card"
                   data-reveal-delay={(idx + 1) * 50}
@@ -924,15 +584,16 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
                   <span className="portal-step-num" aria-hidden="true">
                     0{idx + 1}
                   </span>
-                  <h3>{step.title.replace(/^\d+\.\s*/, "")}</h3>
-                  <p>{step.detail}</p>
+                  <h3>{card.title}</h3>
+                  <p>{card.detail}</p>
                 </article>
               ))}
             </div>
 
             <div className="portal-workflow-bar" data-portal-reveal="section">
               <p>
-                Butuh memeriksa daftar unit pelapor atau membuka panduan penuh?
+                Panduan operasional dan SOP PDF tersedia khusus di menu profil
+                akun Staf Unit maupun Admin PRP setelah login.
               </p>
               <div className="portal-workflow-bar-actions">
                 <button
@@ -941,7 +602,7 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
                   onClick={openUnitsModal}
                 >
                   <PortalGlyph name="grid" size={16} />
-                  <span>Lihat Daftar 42 Unit</span>
+                  <span>Daftar 42 Unit</span>
                 </button>
                 <a
                   href={`mailto:${PORTAL_INSTITUTION.email}?subject=${encodeURIComponent("Koordinasi Akun atau Jadwal SIPETRI")}`}
@@ -1226,14 +887,6 @@ export function PortalPage({ onEnterLogin }: { onEnterLogin: () => void }) {
       >
         <PortalGlyph name="arrowUp" size={20} />
       </button>
-
-      <PortalGuideModal
-        open={guideModalOpen}
-        tab={guideTab}
-        onChangeTab={setGuideTab}
-        onClose={() => setGuideModalOpen(false)}
-        onEnterLogin={onEnterLogin}
-      />
 
       <PortalUnitsModal
         open={unitsModalOpen}

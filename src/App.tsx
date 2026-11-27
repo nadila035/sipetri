@@ -368,11 +368,10 @@ function AppWorkspace({
 
   return (
     <div
-      className={`app-shell${isSidebarCollapsed ? " is-sidebar-collapsed" : ""}${
-        viewportMode === "tablet" && tabletDrawerOpen
-          ? " is-tablet-drawer-open"
-          : ""
-      }`}
+      className={`app-shell${isSidebarCollapsed ? " is-sidebar-collapsed" : ""}${viewportMode === "tablet" && tabletDrawerOpen
+        ? " is-tablet-drawer-open"
+        : ""
+        }`}
     >
       <Sidebar
         active={active}
@@ -429,17 +428,16 @@ function AppWorkspace({
         <div className="content" ref={content}>
           {notice && (
             <div
-              className={`notice${
-                notice.tone === "error"
-                  ? " is-error"
-                  : notice.priority === "urgent"
-                    ? " is-urgent"
-                    : notice.priority === "important"
-                      ? " is-important"
-                      : notice.tone === "info"
-                        ? " is-info"
-                        : ""
-              }`}
+              className={`notice${notice.tone === "error"
+                ? " is-error"
+                : notice.priority === "urgent"
+                  ? " is-urgent"
+                  : notice.priority === "important"
+                    ? " is-important"
+                    : notice.tone === "info"
+                      ? " is-info"
+                      : ""
+                }`}
               role={
                 notice.tone === "error" || notice.priority === "urgent"
                   ? "alert"

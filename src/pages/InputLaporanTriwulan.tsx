@@ -42,6 +42,7 @@ import type {
 } from "../types"
 
 import { resolveInitialUnit, unitOptions } from "../utils/organizations"
+import { annualSources, importAnnualSources } from "../utils/annualSources"
 import { recordBelongsToSession } from "../utils/auth"
 import { useAuth } from "../AuthContext"
 import {
@@ -119,15 +120,23 @@ export function InputLaporanTriwulan({
   const [confirmInfo, setConfirmInfo] = useState<SubmitConfirmInfo | null>(null)
   const [successInfo, setSuccessInfo] = useState<SubmitSuccessInfo | null>(null)
   const quarterDescriptions: Record<string, string> = {
-    I: "Januari – Maret",
-    II: "April – Juni",
-    III: "Juli – September",
-    IV: "Oktober – Desember",
+    I: "Januari - Maret",
+    II: "April - Juni",
+    III: "Juli - September",
+    IV: "Oktober - Desember",
   }
 
   const independentUnit = Boolean(unit && unitOptions[unit]?.length === 0)
   const availableSubUnits = unit && Object.hasOwn(unitOptions, unit)
     ? (independentUnit ? [unit] : unitOptions[unit])
+    : []
+  const targetUnitCode = subUnit || unit
+  const submittedAnnualSources = targetUnitCode
+    ? annualSources(
+        data.records.filter((r) => r.status !== "Draf"),
+        year,
+        targetUnitCode,
+      )
     : []
 
   const stateRef = useRef({ programs, quarter, year, unit, subUnit })
@@ -244,6 +253,54 @@ export function InputLaporanTriwulan({
 
   const addProgram = () => {
     setPrograms((current) => [...current, emptyTriwulanProgram()])
+  }
+
+  const handleImportFromAnnual = () => {
+    if (isLockedForNewInput) {
+      notify(
+        `${lockReason} Pilih periode yang sedang dibuka untuk mengimpor program.`,
+        "error",
+      )
+      return
+    }
+    if (!unit || !subUnit) {
+      notify(
+        "Pilih Unit Utama dan Sub Unit / Bagian terlebih dahulu sebelum mengimpor dari Sasaran Kinerja.",
+        "error",
+      )
+      return
+    }
+    if (submittedAnnualSources.length === 0) {
+      notify(
+        `Sasaran Kinerja Tahun ${year} untuk unit ${targetUnitCode} belum ditemukan atau masih berstatus Draf. Kirim RKA terlebih dahulu hingga minimal berstatus Menunggu.`,
+        "error",
+      )
+      return
+    }
+    const prevLinkedCount = programs.reduce(
+      (acc, p) => acc + p.sasaranList.filter((s) => s.annualSource).length,
+      0,
+    )
+    const nextPrograms = importAnnualSources(
+      programs,
+      submittedAnnualSources,
+      year,
+      targetUnitCode,
+    )
+    const nextLinkedCount = nextPrograms.reduce(
+      (acc, p) => acc + p.sasaranList.filter((s) => s.annualSource).length,
+      0,
+    )
+    setPrograms(
+      nextPrograms.length > 0 ? nextPrograms : [emptyTriwulanProgram()],
+    )
+    const addedCount = nextLinkedCount - prevLinkedCount
+    notify(
+      addedCount > 0
+        ? `${addedCount} sasaran dari Sasaran Kinerja Tahun ${year} (${targetUnitCode}) berhasil diimpor.`
+        : `Seluruh sasaran dari Sasaran Kinerja Tahun ${year} (${targetUnitCode}) sudah ada pada formulir ini.`,
+      addedCount > 0 ? "success" : "info",
+    )
   }
 
   const insertProgramAt = (index: number) => {
@@ -730,6 +787,28 @@ export function InputLaporanTriwulan({
       )}
 
       <fieldset className="locked-fieldset" disabled={isLockedForNewInput}>
+        <div className="annual-import-bar" style={{ marginBottom: 14 }}>
+          <div className="annual-import-copy">
+            <strong>Tarik Program dari Sasaran Kinerja Tahunan (RKA)</strong>
+            <span>
+              {!unit || !subUnit
+                ? "Pilih Unit Utama dan Sub Unit / Bagian yang sama dengan RKA untuk menarik daftar program kerja."
+                : submittedAnnualSources.length > 0
+                  ? `Tersedia ${submittedAnnualSources.length} sasaran RKA Tahun ${year} milik ${targetUnitCode} yang siap diimpor.`
+                  : `Belum ada RKA Tahun ${year} terkirim (minimal berstatus Menunggu, bukan Draf) untuk unit ${targetUnitCode}.`}
+            </span>
+          </div>
+          <button
+            type="button"
+            className="annual-import-btn"
+            disabled={isLockedForNewInput}
+            onClick={handleImportFromAnnual}
+          >
+            <Icon name="target" size={16} />
+            <span>Impor dari Sasaran Kinerja</span>
+          </button>
+        </div>
+
         <div className="report-list">
           <div className="insert-top-rail">
             <button

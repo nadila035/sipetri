@@ -55,6 +55,11 @@ export function AccountMenu({
   const accountLabel =
     session.role === "admin" ? "Admin PRP" : session.displayName
 
+  const sopMenuLabel =
+    session.role === "admin"
+      ? "Panduan & SOP Admin"
+      : "Panduan & SOP Staf"
+
   const closeAndRun = (action: () => void) => {
     setOpen(false)
     action()
@@ -128,7 +133,7 @@ export function AccountMenu({
               <span className="account-item-icon" aria-hidden="true">
                 <Icon name="help" size={15} />
               </span>
-              <span>Bantuan</span>
+              <span>{sopMenuLabel}</span>
             </button>
           </div>
 
