@@ -1,4 +1,5 @@
 import type { HistoryRecord } from "../types/index.ts"
+import { detectTriwulanItemStride } from "./format.ts"
 
 export type ReviewSasaran = {
   id: string
@@ -27,22 +28,32 @@ function buildTriwulanReviewPrograms(
     return null
   }
 
-  const itemsPerSasaran = 11
+  const stride = detectTriwulanItemStride(record)
   const expectedItemCount = record.triwulanPrograms.reduce(
-    (count, program) => count + program.sasaranList.length * itemsPerSasaran,
+    (count, program) => count + program.sasaranList.length * stride,
     0,
   )
 
   if (expectedItemCount !== record.items.length) return null
+
+  const programOffset = stride === 12 ? 1 : 0
+  const targetOffset = stride === 12 ? 2 : 1
 
   let cursor = 0
   return record.triwulanPrograms.map((program, pIdx) => {
     const programItemIndexes: number[] = []
     const sasaranList: ReviewSasaran[] = program.sasaranList.map((sas, sIdx) => {
       const base = cursor
-      cursor += itemsPerSasaran
+      cursor += stride
 
-      if (sIdx === 0 || hasSavedRevision(record, base)) {
+      if (stride === 12) {
+        if (sIdx === 0 || hasSavedRevision(record, base)) {
+          programItemIndexes.push(base)
+        }
+        if (sIdx === 0 || hasSavedRevision(record, base + 1)) {
+          programItemIndexes.push(base + 1)
+        }
+      } else if (sIdx === 0 || hasSavedRevision(record, base)) {
         programItemIndexes.push(base)
       }
 
@@ -50,18 +61,22 @@ function buildTriwulanReviewPrograms(
         id: sas.id || `${program.id || pIdx}-sas-${sIdx}`,
         label:
           sas.target?.trim() ||
-          record.items[base + 1]?.value?.trim() ||
+          record.items[base + targetOffset]?.value?.trim() ||
           `Sasaran ${sIdx + 1}`,
         itemIndexes: Array.from(
-          { length: itemsPerSasaran - 1 },
-          (_, offset) => base + 1 + offset,
+          { length: stride - targetOffset },
+          (_, offset) => base + targetOffset + offset,
         ),
       }
     })
 
     return {
       id: program.id || `triwulan-prog-${pIdx}`,
-      name: program.program || `Program ${pIdx + 1}`,
+      name:
+        program.program ||
+        record.items[programOffset]?.value ||
+        `Program ${pIdx + 1}`,
+      contextLabel: program.strategicGoal?.trim() || undefined,
       programItemIndexes,
       sasaranList,
       itemIndexes: [
@@ -79,12 +94,15 @@ function buildSasaranKinerjaReviewPrograms(
     return null
   }
 
+  const hasLegacyCriteriaItems = record.items[0]?.label === "Kriteria"
   let cursor = 0
   const pendingIndexes: number[] = []
   const programs: ReviewProgram[] = []
 
   for (const [cIdx, criteria] of record.criteriaData.entries()) {
-    pendingIndexes.push(cursor++)
+    if (hasLegacyCriteriaItems) {
+      pendingIndexes.push(cursor++)
+    }
     const strategies =
       criteria.strategies ?? (criteria.strategy ? [criteria.strategy] : [])
 
@@ -96,9 +114,9 @@ function buildSasaranKinerjaReviewPrograms(
           program.sasaranList && program.sasaranList.length > 0
             ? program.sasaranList
             : program.targets.map((target) => ({
-              id: target.id,
-              sasaran: target.sasaran ?? target.target ?? "",
-            }))
+                id: target.id,
+                sasaran: target.sasaran ?? target.target ?? "",
+              }))
 
         const programItemIndexes = [...pendingIndexes, cursor++]
         pendingIndexes.length = 0
@@ -119,7 +137,10 @@ function buildSasaranKinerjaReviewPrograms(
         programs.push({
           id: program.id || `sk-prog-${cIdx}-${stIdx}-${pIdx}`,
           name: program.name || `Program ${programs.length + 1}`,
-          contextLabel: `Kriteria ${cIdx + 1} · Strategi ${cIdx + 1}.${stIdx + 1}`,
+          contextLabel:
+            strategy.name?.trim() ||
+            criteria.name?.trim() ||
+            `Sasaran Strategis ${cIdx + 1}.${stIdx + 1}`,
           programItemIndexes,
           sasaranList,
           itemIndexes: [
@@ -138,12 +159,18 @@ function buildSasaranKinerjaReviewPrograms(
 function buildTriwulanItemsFallback(
   record: HistoryRecord,
 ): ReviewProgram[] | null {
+  if (record.type !== "Laporan Triwulan" || record.items.length === 0) {
+    return null
+  }
+  const stride = detectTriwulanItemStride(record)
+  const progOffset = stride === 12 ? 1 : 0
+  const targetOffset = stride === 12 ? 2 : 1
+
   if (
-    record.type !== "Laporan Triwulan" ||
-    record.items.length === 0 ||
-    record.items.length % 11 !== 0 ||
+    record.items.length % stride !== 0 ||
     !record.items.every(
-      (item, idx) => idx % 11 !== 0 || item.label === "Program Kerja",
+      (item, idx) =>
+        idx % stride !== progOffset || item.label === "Program Kerja",
     )
   ) {
     return null
@@ -152,31 +179,43 @@ function buildTriwulanItemsFallback(
   const byName = new Map<string, ReviewProgram>()
   const result: ReviewProgram[] = []
 
-  for (let i = 0; i < record.items.length; i += 11) {
+  for (let i = 0; i < record.items.length; i += stride) {
+    const goalName = stride === 12 ? record.items[i]?.value?.trim() || "" : ""
     const programName =
-      record.items[i].value?.trim() ||
+      record.items[i + progOffset]?.value?.trim() ||
       record.title ||
       `Program ${result.length + 1}`
-    let entry = byName.get(programName)
+    const mapKey = `${goalName}||${programName}`
+    let entry = byName.get(mapKey)
     if (!entry) {
       entry = {
         id: `triwulan-fallback-${result.length}`,
         name: programName,
-        programItemIndexes: [i],
+        contextLabel: goalName || undefined,
+        programItemIndexes: stride === 12 ? [i, i + 1] : [i],
         sasaranList: [],
         itemIndexes: [],
       }
-      byName.set(programName, entry)
+      byName.set(mapKey, entry)
       result.push(entry)
-    } else if (hasSavedRevision(record, i)) {
-      entry.programItemIndexes.push(i)
+    } else {
+      if (stride === 12 && hasSavedRevision(record, i)) {
+        entry.programItemIndexes.push(i)
+      }
+      if (hasSavedRevision(record, i + progOffset)) {
+        entry.programItemIndexes.push(i + progOffset)
+      }
     }
 
     const sIdx = entry.sasaranList.length
     entry.sasaranList.push({
       id: `triwulan-fallback-sas-${i}`,
-      label: record.items[i + 1]?.value?.trim() || `Sasaran ${sIdx + 1}`,
-      itemIndexes: Array.from({ length: 10 }, (_, offset) => i + 1 + offset),
+      label:
+        record.items[i + targetOffset]?.value?.trim() || `Sasaran ${sIdx + 1}`,
+      itemIndexes: Array.from(
+        { length: stride - targetOffset },
+        (_, offset) => i + targetOffset + offset,
+      ),
     })
   }
 
@@ -210,7 +249,11 @@ function buildGenericItemsFallback(record: HistoryRecord): ReviewProgram[] {
   }
 
   record.items.forEach((item, index) => {
-    if (item.label === "Kriteria" || item.label === "Strategi") {
+    if (
+      item.label === "Kriteria" ||
+      item.label === "Strategi" ||
+      item.label === "Sasaran Strategis"
+    ) {
       pendingProgramIndexes.push(index)
       currentSasaran = null
       return
@@ -233,12 +276,16 @@ function buildGenericItemsFallback(record: HistoryRecord): ReviewProgram[] {
 
     const program = ensureProgram(record.title)
 
-    if (item.label === "Sasaran" || !currentSasaran) {
+    if (
+      item.label === "Sasaran" ||
+      item.label === "Sasaran Kinerja" ||
+      !currentSasaran
+    ) {
       const sIdx = program.sasaranList.length
       currentSasaran = {
         id: `generic-sas-${index}`,
         label:
-          item.label === "Sasaran"
+          item.label === "Sasaran" || item.label === "Sasaran Kinerja"
             ? item.value?.trim() || `Sasaran ${sIdx + 1}`
             : `Sasaran ${sIdx + 1}`,
         itemIndexes: [index],
@@ -264,12 +311,12 @@ function buildGenericItemsFallback(record: HistoryRecord): ReviewProgram[] {
         programItemIndexes: [],
         sasaranList: allIndexes.length
           ? [
-            {
-              id: "fallback-sas-0",
-              label: record.title,
-              itemIndexes: allIndexes,
-            },
-          ]
+              {
+                id: "fallback-sas-0",
+                label: record.title,
+                itemIndexes: allIndexes,
+              },
+            ]
           : [],
         itemIndexes: allIndexes,
       },
@@ -352,10 +399,11 @@ export function getSasaranKinerjaReviewCriteria(
   record: HistoryRecord,
 ): ReviewTargetCriteriaSlot[] {
   if (record.criteriaData?.length) {
+    const hasLegacyCriteriaItems = record.items[0]?.label === "Kriteria"
     let cursor = 0
     const criteriaSlots: ReviewTargetCriteriaSlot[] = record.criteriaData.map(
       (crit, cIdx) => {
-        const critItemIdx = cursor++
+        const critItemIdx = hasLegacyCriteriaItems ? cursor++ : -1
         const strats =
           crit.strategies && crit.strategies.length > 0
             ? crit.strategies
@@ -404,7 +452,7 @@ export function getSasaranKinerjaReviewCriteria(
 
             return {
               id: strat.id || `strat-${cIdx}-${stIdx}`,
-              name: strat.name || "-",
+              name: strat.name || crit.name || "-",
               stratItemIdx,
               programSlots,
             }
@@ -413,19 +461,18 @@ export function getSasaranKinerjaReviewCriteria(
 
         return {
           id: crit.id || `crit-${cIdx}`,
-          name: crit.name || "-",
+          name: crit.name || strats[0]?.name || "-",
           critItemIdx,
           stratSlots,
         }
       },
     )
 
-    if (record.items.length > 0 && cursor === record.items.length) {
+    if (record.items.length === 0 || cursor === record.items.length) {
       return criteriaSlots
     }
   }
 
-  // Fallback for legacy/flat Sasaran Kinerja items without criteriaData
   const criteriaSlots: ReviewTargetCriteriaSlot[] = []
   let currentCrit: ReviewTargetCriteriaSlot | null = null
   let currentStrat: ReviewTargetStrategySlot | null = null
@@ -445,7 +492,7 @@ export function getSasaranKinerjaReviewCriteria(
   }
 
   const ensureStrat = (name: string, stratItemIdx = -1) => {
-    const crit = ensureCrit(record.title)
+    const crit = ensureCrit(name || record.title)
     if (currentStrat) return currentStrat
     currentStrat = {
       id: `fallback-strat-${crit.stratSlots.length}`,
@@ -502,8 +549,8 @@ export function getSasaranKinerjaReviewCriteria(
       return
     }
 
-    if (item.label === "Strategi") {
-      const crit = ensureCrit(record.title)
+    if (item.label === "Strategi" || item.label === "Sasaran Strategis") {
+      const crit = ensureCrit(item.value || record.title)
       currentStrat = {
         id: `fallback-strat-${crit.stratSlots.length}`,
         name: item.value || "-",
@@ -529,7 +576,7 @@ export function getSasaranKinerjaReviewCriteria(
       return
     }
 
-    if (item.label === "Sasaran") {
+    if (item.label === "Sasaran" || item.label === "Sasaran Kinerja") {
       const prog = ensureProg(record.title)
       currentSas = {
         id: `fallback-sas-${prog.sasaranSlots.length}`,
@@ -557,4 +604,3 @@ export function getSasaranKinerjaReviewCriteria(
 
   return criteriaSlots
 }
-

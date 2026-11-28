@@ -8,8 +8,15 @@ import {
 } from "../utils/organizations"
 
 import { AnnualSourceSummary } from "../components/AnnualSourceSummary"
+import { AdminMasterSasaranStrategis } from "../components/AdminMasterIndicators"
+import { LateMonitoringPage } from "../components/LateMonitoringPage"
 import { MonitoringOverview } from "../components/MonitoringOverview"
 import { DetailModal } from "../components/DetailModal"
+import {
+  recordMatchesUnitCode,
+  syncTriwulanFromApprovedAnnual,
+} from "../utils/annualSources"
+import { buildTriwulanItems, upsertDraftRecord } from "../utils/drafts"
 
 import {
   canReview,
@@ -54,6 +61,7 @@ import type {
   HistoryRecord,
   HistoryStatus,
   HistoryType,
+  LateStatus,
   NotificationTargetScope,
   NotifyFn,
 } from "../types"
@@ -62,8 +70,10 @@ import "../admin.css"
 
 export const adminMenus = [
   "Dashboard Monitoring",
-  "Verifikasi Laporan Triwulan",
+  "Master Sasaran Strategis",
   "Verifikasi Sasaran Kinerja",
+  "Verifikasi Laporan Triwulan",
+  "Monitoring Keterlambatan",
   "Arsip dan Rekapitulasi",
   "Periode dan Tenggat Waktu",
 ]
@@ -99,6 +109,9 @@ export function Admin({
   const [selectedId, setSelectedId] = useState("")
 
   const [notes, setNotes] = useState<Record<string, string>>({})
+  const [lateOverrides, setLateOverrides] = useState<Record<string, LateStatus>>(
+    {},
+  )
 
   const [activeNoteIndex, setActiveNoteIndex] = useState<number | null>(null)
   const noteTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -269,6 +282,7 @@ export function Admin({
   const resetReviewSelection = () => {
     setSelectedId("")
     setNotes({})
+    setLateOverrides({})
     setActiveNoteIndex(null)
     setReviewReturnTarget("page")
   }
@@ -293,6 +307,7 @@ export function Admin({
     if (!confirmReviewDiscard()) return
     setSelectedId(record.id)
     setNotes({})
+    setLateOverrides(record.lateNotes ?? {})
     setActiveNoteIndex(null)
     setReviewReturnTarget(returnTarget)
   }
@@ -436,6 +451,9 @@ export function Admin({
     const unitLabel = formatRecordUnitLabel(selected)
     const targetUnit =
       resolveOrganization(selected)?.subUnit || selected.subUnit || selected.unit
+    const isApprovingSasaranKinerja =
+      action === "Disetujui" && selected.type === "Sasaran Kinerja"
+
     const staffNotif = createAppNotification({
       recipient: "staff",
       category: action === "Revisi" ? "revision_requested" : "document_approved",
@@ -445,37 +463,122 @@ export function Admin({
           ? noteCount > 0
             ? `${noteCount} catatan indikator perlu diperbaiki`
             : "Periksa catatan indikator dari Admin PRP"
-          : `${unitLabel} · ${selected.period} selesai diverifikasi`,
+          : isApprovingSasaranKinerja
+            ? `${unitLabel} · ${selected.period} disetujui (ACC). Modul Laporan Triwulan kini terbuka dan terisi otomatis.`
+            : `${unitLabel} · ${selected.period} selesai diverifikasi`,
       actor: review.actor,
       createdAt: review.at,
-      targetMenu: "Riwayat",
-      recordId: selected.id,
+      targetMenu:
+        action === "Revisi"
+          ? "Riwayat"
+          : isApprovingSasaranKinerja
+            ? "Isi Laporan Triwulan"
+            : "Riwayat",
+      recordId: isApprovingSasaranKinerja ? undefined : selected.id,
       openRevision: action === "Revisi",
       unitLabel,
       periodLabel: selected.period,
       targetUnit,
     })
 
-    setData((current) => ({
-      ...current,
-      records: current.records.map((r) =>
-        r.id !== selected.id || r.status !== "Menunggu"
-          ? r
-          : {
-            ...r,
-            status: action,
-            reviews: [...(r.reviews ?? []), review],
-            items: r.items.map((item, i) => ({
-              ...item,
-              note: review.notes[String(i)]?.trim() || undefined,
-              needsRevision: !!review.notes[String(i)]?.trim(),
-            })),
-          },
-      ),
-      notifications: appendNotifications(current.notifications, staffNotif),
-    }))
+    setData((current) => {
+      const updatedRecords = current.records.map((r) => {
+        if (r.id !== selected.id || r.status !== "Menunggu") return r
+        const mergedLateNotes =
+          r.type === "Laporan Triwulan"
+            ? { ...(r.lateNotes ?? {}), ...lateOverrides }
+            : r.lateNotes
+        const nextTriwulanPrograms =
+          r.type === "Laporan Triwulan" && r.triwulanPrograms
+            ? r.triwulanPrograms.map((prog) => ({
+                ...prog,
+                sasaranList: prog.sasaranList.map((sas) => {
+                  const chosenLate = mergedLateNotes?.[sas.id] ?? sas.lateStatus
+                  const pctNum = Number.parseFloat(sas.percentage || "0") || 0
+                  const qCode =
+                    r.period.match(/Triwulan\s+(IV|III|II|I)\b/i)?.[1]?.toUpperCase() ??
+                    current.quarter
+                  return {
+                    ...sas,
+                    ...(chosenLate ? { lateStatus: chosenLate } : {}),
+                    ...(action === "Disetujui" && pctNum >= 100
+                      ? {
+                          completedInQuarter: sas.completedInQuarter ?? qCode,
+                        }
+                      : {}),
+                  }
+                }),
+              }))
+            : r.triwulanPrograms
 
-    notify(`${selected.title}: ${action}.`)
+        return {
+          ...r,
+          status: action,
+          reviews: [...(r.reviews ?? []), review],
+          ...(mergedLateNotes && Object.keys(mergedLateNotes).length > 0
+            ? { lateNotes: mergedLateNotes }
+            : {}),
+          ...(nextTriwulanPrograms
+            ? { triwulanPrograms: nextTriwulanPrograms }
+            : {}),
+          items: r.items.map((item, i) => ({
+            ...item,
+            note: review.notes[String(i)]?.trim() || undefined,
+            needsRevision: !!review.notes[String(i)]?.trim(),
+          })),
+        }
+      })
+
+      let finalRecords = updatedRecords
+
+      // Refresh any existing active Triwulan drafts when Admin approves Sasaran Kinerja
+      if (isApprovingSasaranKinerja && targetUnit) {
+        const docYear =
+          selected.period.match(/\b(\d{4})\b/)?.[1] ?? current.year
+        const approvedDoc = updatedRecords.find((r) => r.id === selected.id)
+        if (approvedDoc) {
+          finalRecords = updatedRecords.map((r) => {
+            if (
+              r.type !== "Laporan Triwulan" ||
+              r.status !== "Draf" ||
+              !r.period.includes(docYear) ||
+              !recordMatchesUnitCode(r, targetUnit)
+            ) {
+              return r
+            }
+            const qMatch =
+              r.period.match(/Triwulan\s+(IV|III|II|I)\b/i)?.[1]?.toUpperCase() ??
+              "I"
+            const syncedPrograms = syncTriwulanFromApprovedAnnual({
+              existingPrograms: r.triwulanPrograms ?? [],
+              approvedRecord: approvedDoc,
+              allRecords: updatedRecords,
+              year: docYear,
+              quarter: qMatch,
+              unitCode: targetUnit,
+            })
+            return {
+              ...r,
+              updatedAt: review.at,
+              items: buildTriwulanItems(syncedPrograms),
+              triwulanPrograms: syncedPrograms,
+            }
+          })
+        }
+      }
+
+      return {
+        ...current,
+        records: finalRecords,
+        notifications: appendNotifications(current.notifications, staffNotif),
+      }
+    })
+
+    notify(
+      isApprovingSasaranKinerja
+        ? `${selected.title} disetujui (ACC). Data otomatis disinkronkan ke Laporan Triwulan ${targetUnit}.`
+        : `${selected.title}: ${action}.`,
+    )
 
     resetReviewSelection()
   }
@@ -1035,6 +1138,10 @@ export function Admin({
     string,
     { kicker: string; title: string }
   > = {
+    "Master Sasaran Strategis": {
+      kicker: "MASTER DATA ADMIN / RENBANG",
+      title: "Kelola Master Sasaran Strategis",
+    },
     "Verifikasi Laporan Triwulan": {
       kicker: "VERIFIKASI DOKUMEN",
       title: "Daftar Laporan Triwulan",
@@ -1042,6 +1149,10 @@ export function Admin({
     "Verifikasi Sasaran Kinerja": {
       kicker: "VERIFIKASI DOKUMEN",
       title: "Daftar Sasaran Kinerja",
+    },
+    "Monitoring Keterlambatan": {
+      kicker: "MONITORING CAPAIAN TERTUNGGAK",
+      title: "Monitoring Pekerjaan Triwulan Terlambat",
     },
     "Arsip dan Rekapitulasi": {
       kicker: "ARSIP & REKAPITULASI",
@@ -1167,7 +1278,22 @@ export function Admin({
             )}
           </div>
         )}
-        {active === "Periode dan Tenggat Waktu" ? (
+        {active === "Master Sasaran Strategis" ? (
+          <AdminMasterSasaranStrategis notify={notify} />
+        ) : active === "Monitoring Keterlambatan" ? (
+          <LateMonitoringPage
+            role="admin"
+            notify={notify}
+            onOpenDocument={(recId) => {
+              const target = submittedRecords.find((r) => r.id === recId)
+              if (target) {
+                setDetailRecord(target)
+              } else {
+                notify("Dokumen terkait masih berstatus Draf lokal unit.", "info")
+              }
+            }}
+          />
+        ) : active === "Periode dan Tenggat Waktu" ? (
           <div className="admin-period-stack">
             <div className="admin-period-topbar">
               <section className="panel admin-panel admin-period-panel">
@@ -1992,205 +2118,146 @@ export function Admin({
 
                 const renderTargetsTable = () => {
                   const criteriaSlots = getSasaranKinerjaReviewCriteria(selected)
+                  let rowCounter = 0
                   return (
                     <div className="admin-review-table-wrap target-table-wrap">
-                      <table className="detail-target-table admin-review-target-table">
+                      <table className="detail-target-table admin-review-target-table sasaran-green-table">
                         <colgroup>
-                          <col style={{ width: "50px" }} />
-                          <col style={{ width: "21%" }} />
-                          <col style={{ width: "50px" }} />
-                          <col style={{ width: "23%" }} />
-                          <col style={{ width: "25%" }} />
-                          <col style={{ width: "15%" }} />
+                          <col style={{ width: "52px" }} />
+                          <col style={{ width: "22%" }} />
+                          <col style={{ width: "22%" }} />
+                          <col style={{ width: "24%" }} />
+                          <col style={{ width: "16%" }} />
                           <col style={{ width: "16%" }} />
                         </colgroup>
                         <thead>
                           <tr>
-                            <th
-                              style={{
-                                width: "50px",
-                                textAlign: "center",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              NO
-                            </th>
-                            <th>STRATEGI</th>
-                            <th colSpan={2} style={{ textAlign: "center" }}>
-                              PROGRAM KERJA
-                            </th>
-                            <th>SASARAN</th>
+                            <th style={{ textAlign: "center" }}>No</th>
+                            <th>SASARAN STRATEGIS</th>
+                            <th>PROGRAM KERJA</th>
+                            <th>SASARAN KINERJA</th>
                             <th style={{ textAlign: "center" }}>
                               BULAN PELAKSANAAN PROGRAM KERJA
                             </th>
                             <th>KETERANGAN</th>
                           </tr>
-                          <tr className="subhead-number-row">
-                            <th style={{ textAlign: "center" }}>1</th>
-                            <th style={{ textAlign: "center" }}>2</th>
-                            <th style={{ textAlign: "center" }}>3</th>
-                            <th style={{ textAlign: "center" }}>4</th>
-                            <th style={{ textAlign: "center" }}>5</th>
-                            <th style={{ textAlign: "center" }}>6</th>
-                            <th style={{ textAlign: "center" }}>7</th>
-                          </tr>
                         </thead>
                         <tbody>
-                          {criteriaSlots.map((crit, cIdx) => {
-                            const critState = getCellState(crit.critItemIdx)
-                            const critVal =
-                              critState.item?.value ?? crit.name ?? "-"
-                            return (
-                              <Fragment key={crit.id}>
-                                <tr className="criteria-section-row">
-                                  <td className="criteria-num-cell">{cIdx + 1}</td>
-                                  <td
-                                    colSpan={6}
-                                    className={[
-                                      "criteria-title-cell",
-                                      critState.tdStateClass,
+                          {criteriaSlots.map((crit) =>
+                            crit.stratSlots.map((strat) => {
+                              const stratState = getCellState(strat.stratItemIdx)
+                              const stratVal =
+                                stratState.item?.value ??
+                                strat.name ??
+                                crit.name ??
+                                "-"
+                              const totalStratRows = strat.programSlots.reduce(
+                                (acc, p) =>
+                                  acc + Math.max(1, p.sasaranSlots.length),
+                                0,
+                              )
+
+                              return strat.programSlots.map((prog, pIdx) => {
+                                const progState = getCellState(prog.progItemIdx)
+                                const progVal =
+                                  progState.item?.value ?? prog.name ?? "-"
+                                const rows = prog.sasaranSlots.length
+                                  ? prog.sasaranSlots
+                                  : [
+                                      {
+                                        id: `${prog.id}-empty`,
+                                        sasaran: "-",
+                                        bulanMulai: "-",
+                                        bulanSelesai: "",
+                                        keterangan: "-",
+                                        sasaranItemIdx: -1,
+                                        bulanItemIdx: -1,
+                                        keteranganItemIdx: -1,
+                                      },
                                     ]
-                                      .filter(Boolean)
-                                      .join(" ")}
-                                  >
-                                    {renderReviewCell(
-                                      crit.critItemIdx,
-                                      critVal,
-                                      `Kriteria ${cIdx + 1}`,
-                                    )}
-                                  </td>
-                                </tr>
-                                {crit.stratSlots.map((strat, sIdx) => {
-                                  const stratNum = `${cIdx + 1}.${sIdx + 1}`
-                                  const stratState = getCellState(
-                                    strat.stratItemIdx,
-                                  )
-                                  const stratVal =
-                                    stratState.item?.value ?? strat.name ?? "-"
-                                  const totalStratRows = strat.programSlots.reduce(
-                                    (acc, p) =>
-                                      acc + Math.max(1, p.sasaranSlots.length),
-                                    0,
-                                  )
+                                const progRows = rows.length
 
-                                  return strat.programSlots.map((prog, pIdx) => {
-                                    const progNum = `${stratNum}.${pIdx + 1}`
-                                    const progState = getCellState(
-                                      prog.progItemIdx,
+                                return rows.map((sas, sasIdx) => {
+                                  rowCounter += 1
+                                  const isFirstSasOfProg = sasIdx === 0
+                                  const isFirstProgOfStrat =
+                                    pIdx === 0 && isFirstSasOfProg
+                                  const sasState = getCellState(
+                                    sas.sasaranItemIdx,
+                                  )
+                                  const bulanState = getCellState(
+                                    sas.bulanItemIdx,
+                                  )
+                                  const ketState = getCellState(
+                                    sas.keteranganItemIdx,
+                                  )
+                                  const sasVal =
+                                    sasState.item?.value ?? sas.sasaran
+                                  const bulanVal =
+                                    bulanState.item?.value ??
+                                    formatBulanPelaksanaan(
+                                      sas.bulanMulai,
+                                      sas.bulanSelesai,
                                     )
-                                    const progVal =
-                                      progState.item?.value ?? prog.name ?? "-"
-                                    const rows = prog.sasaranSlots.length
-                                      ? prog.sasaranSlots
-                                      : [
-                                        {
-                                          id: `${prog.id}-empty`,
-                                          sasaran: "-",
-                                          bulanMulai: "-",
-                                          bulanSelesai: "",
-                                          keterangan: "-",
-                                          sasaranItemIdx: -1,
-                                          bulanItemIdx: -1,
-                                          keteranganItemIdx: -1,
-                                        },
-                                      ]
-                                    const progRows = rows.length
+                                  const ketVal =
+                                    ketState.item?.value ?? sas.keterangan
 
-                                    return rows.map((sas, sasIdx) => {
-                                      const isFirstSasOfProg = sasIdx === 0
-                                      const isFirstProgOfStrat =
-                                        pIdx === 0 && isFirstSasOfProg
-                                      const sasState = getCellState(
-                                        sas.sasaranItemIdx,
-                                      )
-                                      const bulanState = getCellState(
-                                        sas.bulanItemIdx,
-                                      )
-                                      const ketState = getCellState(
-                                        sas.keteranganItemIdx,
-                                      )
-                                      const sasVal =
-                                        sasState.item?.value ?? sas.sasaran
-                                      const bulanVal =
-                                        bulanState.item?.value ??
-                                        formatBulanPelaksanaan(
-                                          sas.bulanMulai,
-                                          sas.bulanSelesai,
-                                        )
-                                      const ketVal =
-                                        ketState.item?.value ?? sas.keterangan
-
-                                      return (
-                                        <tr key={`${prog.id}-${sas.id}`}>
-                                          {isFirstProgOfStrat && (
-                                            <>
-                                              <td
-                                                rowSpan={totalStratRows}
-                                                className="admin-review-num-cell"
-                                              >
-                                                {stratNum}
-                                              </td>
-                                              <td
-                                                rowSpan={totalStratRows}
-                                                className={stratState.tdStateClass}
-                                              >
-                                                {renderReviewCell(
-                                                  strat.stratItemIdx,
-                                                  stratVal,
-                                                  `Strategi ${stratNum}`,
-                                                )}
-                                              </td>
-                                            </>
+                                  return (
+                                    <tr key={`${prog.id}-${sas.id}`}>
+                                      <td className="admin-review-num-cell">
+                                        {rowCounter}
+                                      </td>
+                                      {isFirstProgOfStrat && (
+                                        <td
+                                          rowSpan={totalStratRows}
+                                          className={stratState.tdStateClass}
+                                        >
+                                          {renderReviewCell(
+                                            strat.stratItemIdx,
+                                            stratVal,
+                                            `Sasaran Strategis #${rowCounter}`,
                                           )}
-                                          {isFirstSasOfProg && (
-                                            <>
-                                              <td
-                                                rowSpan={progRows}
-                                                className="admin-review-num-cell"
-                                              >
-                                                {progNum}
-                                              </td>
-                                              <td
-                                                rowSpan={progRows}
-                                                className={progState.tdStateClass}
-                                              >
-                                                {renderReviewCell(
-                                                  prog.progItemIdx,
-                                                  progVal,
-                                                  `Program Kerja ${progNum}`,
-                                                )}
-                                              </td>
-                                            </>
+                                        </td>
+                                      )}
+                                      {isFirstSasOfProg && (
+                                        <td
+                                          rowSpan={progRows}
+                                          className={progState.tdStateClass}
+                                        >
+                                          {renderReviewCell(
+                                            prog.progItemIdx,
+                                            progVal,
+                                            `Program Kerja #${rowCounter}`,
                                           )}
-                                          <td className={sasState.tdStateClass}>
-                                            {renderReviewCell(
-                                              sas.sasaranItemIdx,
-                                              sasVal,
-                                              `Sasaran ${progNum}.${sasIdx + 1}`,
-                                            )}
-                                          </td>
-                                          <td className={bulanState.tdStateClass}>
-                                            {renderReviewCell(
-                                              sas.bulanItemIdx,
-                                              bulanVal,
-                                              `Bulan Pelaksanaan ${progNum}.${sasIdx + 1}`,
-                                            )}
-                                          </td>
-                                          <td className={ketState.tdStateClass}>
-                                            {renderReviewCell(
-                                              sas.keteranganItemIdx,
-                                              ketVal,
-                                              `Keterangan ${progNum}.${sasIdx + 1}`,
-                                            )}
-                                          </td>
-                                        </tr>
-                                      )
-                                    })
-                                  })
-                                })}
-                              </Fragment>
-                            )
-                          })}
+                                        </td>
+                                      )}
+                                      <td className={sasState.tdStateClass}>
+                                        {renderReviewCell(
+                                          sas.sasaranItemIdx,
+                                          sasVal,
+                                          `Sasaran Kinerja #${rowCounter}`,
+                                        )}
+                                      </td>
+                                      <td className={bulanState.tdStateClass}>
+                                        {renderReviewCell(
+                                          sas.bulanItemIdx,
+                                          bulanVal,
+                                          `Bulan Pelaksanaan #${rowCounter}`,
+                                        )}
+                                      </td>
+                                      <td className={ketState.tdStateClass}>
+                                        {renderReviewCell(
+                                          sas.keteranganItemIdx,
+                                          ketVal,
+                                          `Keterangan #${rowCounter}`,
+                                        )}
+                                      </td>
+                                    </tr>
+                                  )
+                                })
+                              })
+                            }),
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -2199,71 +2266,41 @@ export function Admin({
 
                 const renderTriwulanTable = () => {
                   const triwulanPrograms = getTriwulanData(selected)
+                  const docYear =
+                    selected.period.match(/\b(\d{4})\b/)?.[1] ?? data.year
+                  let rowCounter = 0
                   return (
                     <div className="admin-review-table-wrap target-table-wrap">
-                      <table className="detail-triwulan-table admin-review-triwulan-table">
-                        <colgroup>
-                          <col style={{ width: "46px" }} />
-                          <col style={{ width: "13%" }} />
-                          <col style={{ width: "13%" }} />
-                          <col style={{ width: "9%" }} />
-                          <col style={{ width: "10%" }} />
-                          <col style={{ width: "10%" }} />
-                          <col style={{ width: "6%" }} />
-                          <col style={{ width: "9%" }} />
-                          <col style={{ width: "9%" }} />
-                          <col style={{ width: "8%" }} />
-                          <col style={{ width: "8%" }} />
-                          <col style={{ width: "9%" }} />
-                        </colgroup>
+                      <table className="detail-triwulan-table admin-review-triwulan-table triwulan-grid-table">
                         <thead>
                           <tr>
-                            <th
-                              className="sticky-no"
-                              style={{
-                                width: "46px",
-                                textAlign: "center",
-                                whiteSpace: "nowrap",
-                              }}
-                            >
-                              NO
+                            <th className="th-blue sticky-no" style={{ width: "46px", textAlign: "center" }}>
+                              No
                             </th>
-                            <th className="sticky-program">PROGRAM KERJA</th>
-                            <th>SASARAN</th>
-                            <th style={{ textAlign: "center" }}>
+                            <th className="th-blue">Sasaran Strategis</th>
+                            <th className="th-blue sticky-program">
+                              Program Kerja {docYear}
+                            </th>
+                            <th className="th-blue">Sasaran</th>
+                            <th className="th-blue" style={{ textAlign: "center" }}>
                               BULAN PELAKSANAAN PROGRAM KERJA
                             </th>
-                            <th>TAHAP PELAKSANAAN (URAIAN)</th>
-                            <th>REALISASI PELAKSANAAN (URAIAN)</th>
-                            <th style={{ textAlign: "center" }}>
-                              REALISASI PELAKSANAAN (%)
+                            <th className="th-blue">Tahap Pelaksanaan (Uraian)</th>
+                            <th className="th-blue">Realisasi Pelaksanaan (Uraian)</th>
+                            <th className="th-blue" style={{ textAlign: "center" }}>
+                              Realisasi Pelaksanaan (%)
                             </th>
-                            <th>KENDALA</th>
-                            <th>RENCANA PENYELESAIAN KENDALA</th>
-                            <th>WAKTU PENYELESAIAN KENDALA</th>
-                            <th>KETERANGAN</th>
-                            <th>LINK EVIDENCE</th>
-                          </tr>
-                          <tr className="subhead-number-row">
-                            <th className="sticky-no" style={{ textAlign: "center" }}>
-                              1
+                            <th className="th-pink">
+                              Kendala (diisi jika program kerja belum terlaksana)
                             </th>
-                            <th
-                              className="sticky-program"
-                              style={{ textAlign: "center" }}
-                            >
-                              2
+                            <th className="th-pink">
+                              Rencana Penyelesaian Kendala (diisi jika pencapaian program kerja tidak sesuai dengan rencana)
                             </th>
-                            <th style={{ textAlign: "center" }}>3</th>
-                            <th style={{ textAlign: "center" }}>4</th>
-                            <th style={{ textAlign: "center" }}>5</th>
-                            <th style={{ textAlign: "center" }}>6</th>
-                            <th style={{ textAlign: "center" }}>7</th>
-                            <th style={{ textAlign: "center" }}>8</th>
-                            <th style={{ textAlign: "center" }}>9</th>
-                            <th style={{ textAlign: "center" }}>10</th>
-                            <th style={{ textAlign: "center" }}>11</th>
-                            <th style={{ textAlign: "center" }}>12</th>
+                            <th className="th-pink">
+                              Waktu Penyelesaian kendala (diisi jika pencapaian program kerja tidak sesuai dengan rencana)
+                            </th>
+                            <th className="th-green">KETERANGAN</th>
+                            <th className="th-yellow">Link Evidence</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2272,47 +2309,83 @@ export function Admin({
                               1,
                               prog.sasaranList.length,
                             )
-                            const extraProgramNoteIndexes = prog.sasaranList
-                              .slice(1)
-                              .map((s) => s.baseIdx)
                             return prog.sasaranList.map((sas, sIdx) => {
+                              rowCounter += 1
                               const isFirstSas = sIdx === 0
+                              const stride = sas.stride ?? 12
                               const baseIdx =
-                                sas.baseIdx ?? pIdx * 11 + sIdx * 11
-                              const valAt = (offset: number, fallback: string) =>
-                                selected.items[baseIdx + offset]?.value ??
-                                fallback
+                                sas.baseIdx ?? (rowCounter - 1) * stride
+                              const goalOff = stride === 12 ? 0 : -1
+                              const progOff = stride === 12 ? 1 : 0
+                              const sasOff = stride === 12 ? 2 : 1
+                              const monthOff = stride === 12 ? 3 : 2
+                              const stageOff = stride === 12 ? 4 : 3
+                              const realOff = stride === 12 ? 5 : 4
+                              const pctOff = stride === 12 ? 6 : 5
+                              const obsOff = stride === 12 ? 7 : 6
+                              const solOff = stride === 12 ? 8 : 7
+                              const solTimeOff = stride === 12 ? 9 : 8
+                              const noteOff = stride === 12 ? 10 : 9
+                              const evOff = stride === 12 ? 11 : 10
 
-                              const progState = getCellState(
-                                baseIdx,
-                                extraProgramNoteIndexes,
+                              const valAt = (offset: number, fallback: string) =>
+                                offset >= 0
+                                  ? (selected.items[baseIdx + offset]?.value ??
+                                    fallback)
+                                  : fallback
+
+                              const extraProgIndexes = prog.sasaranList
+                                .slice(1)
+                                .map((s) => s.baseIdx + progOff)
+
+                              const goalState = getCellState(
+                                goalOff >= 0 ? baseIdx + goalOff : -1,
                               )
-                              const sasState = getCellState(baseIdx + 1)
-                              const monthState = getCellState(baseIdx + 2)
-                              const stageState = getCellState(baseIdx + 3)
-                              const realState = getCellState(baseIdx + 4)
-                              const pctState = getCellState(baseIdx + 5)
-                              const obsState = getCellState(baseIdx + 6)
-                              const solState = getCellState(baseIdx + 7)
-                              const solTimeState = getCellState(baseIdx + 8)
-                              const noteState = getCellState(baseIdx + 9)
-                              const evState = getCellState(baseIdx + 10)
-                              const rawMonth = valAt(2, sas.month)
+                              const progState = getCellState(
+                                baseIdx + progOff,
+                                extraProgIndexes,
+                              )
+                              const sasState = getCellState(baseIdx + sasOff)
+                              const monthState = getCellState(baseIdx + monthOff)
+                              const stageState = getCellState(baseIdx + stageOff)
+                              const realState = getCellState(baseIdx + realOff)
+                              const pctState = getCellState(baseIdx + pctOff)
+                              const obsState = getCellState(baseIdx + obsOff)
+                              const solState = getCellState(baseIdx + solOff)
+                              const solTimeState = getCellState(
+                                baseIdx + solTimeOff,
+                              )
+                              const noteState = getCellState(baseIdx + noteOff)
+                              const evState = getCellState(baseIdx + evOff)
+
+                              const rawMonth = valAt(monthOff, sas.month)
                               const formattedMonth = /^\d{4}-\d{2}$/.test(
                                 rawMonth.trim(),
                               )
                                 ? formatBulanPelaksanaan(rawMonth.trim())
                                 : rawMonth
 
+                              const currentLateStatus =
+                                lateOverrides[sas.id] ??
+                                sas.lateStatus ??
+                                "Tepat Waktu"
+
                               return (
                                 <tr key={`${prog.id}-${sas.id || sIdx}`}>
+                                  <td className="sticky-no admin-review-num-cell">
+                                    {rowCounter}
+                                  </td>
                                   {isFirstSas && (
                                     <>
                                       <td
                                         rowSpan={totalSasRows}
-                                        className="sticky-no admin-review-num-cell"
+                                        className={goalState.tdStateClass}
                                       >
-                                        {pIdx + 1}
+                                        {renderReviewCell(
+                                          goalOff >= 0 ? baseIdx + goalOff : -1,
+                                          valAt(goalOff, prog.strategicGoal),
+                                          `Sasaran Strategis #${pIdx + 1}`,
+                                        )}
                                       </td>
                                       <td
                                         rowSpan={totalSasRows}
@@ -2324,12 +2397,11 @@ export function Admin({
                                           .join(" ")}
                                       >
                                         {renderReviewCell(
-                                          baseIdx,
-                                          valAt(0, prog.program),
+                                          baseIdx + progOff,
+                                          valAt(progOff, prog.program),
                                           `Program Kerja #${pIdx + 1}`,
                                           {
-                                            extraNoteIndexes:
-                                              extraProgramNoteIndexes,
+                                            extraNoteIndexes: extraProgIndexes,
                                           },
                                         )}
                                       </td>
@@ -2337,29 +2409,29 @@ export function Admin({
                                   )}
                                   <td className={sasState.tdStateClass}>
                                     {renderReviewCell(
-                                      baseIdx + 1,
-                                      valAt(1, sas.target),
+                                      baseIdx + sasOff,
+                                      valAt(sasOff, sas.target),
                                       `Sasaran #${pIdx + 1}.${sIdx + 1}`,
                                     )}
                                   </td>
                                   <td className={monthState.tdStateClass}>
                                     {renderReviewCell(
-                                      baseIdx + 2,
+                                      baseIdx + monthOff,
                                       formattedMonth,
                                       `Bulan Pelaksanaan #${pIdx + 1}.${sIdx + 1}`,
                                     )}
                                   </td>
                                   <td className={stageState.tdStateClass}>
                                     {renderReviewCell(
-                                      baseIdx + 3,
-                                      valAt(3, sas.stage),
+                                      baseIdx + stageOff,
+                                      valAt(stageOff, sas.stage),
                                       `Tahap Pelaksanaan #${pIdx + 1}.${sIdx + 1}`,
                                     )}
                                   </td>
                                   <td className={realState.tdStateClass}>
                                     {renderReviewCell(
-                                      baseIdx + 4,
-                                      valAt(4, sas.realization),
+                                      baseIdx + realOff,
+                                      valAt(realOff, sas.realization),
                                       `Realisasi Pelaksanaan #${pIdx + 1}.${sIdx + 1}`,
                                     )}
                                   </td>
@@ -2368,38 +2440,76 @@ export function Admin({
                                     style={{ fontWeight: 600 }}
                                   >
                                     {renderReviewCell(
-                                      baseIdx + 5,
-                                      valAt(5, sas.percentage),
+                                      baseIdx + pctOff,
+                                      valAt(pctOff, sas.percentage),
                                       `Realisasi (%) #${pIdx + 1}.${sIdx + 1}`,
                                       { centerText: true },
                                     )}
                                   </td>
                                   <td className={obsState.tdStateClass}>
                                     {renderReviewCell(
-                                      baseIdx + 6,
-                                      valAt(6, sas.obstacle),
+                                      baseIdx + obsOff,
+                                      valAt(obsOff, sas.obstacle),
                                       `Kendala #${pIdx + 1}.${sIdx + 1}`,
                                     )}
                                   </td>
                                   <td className={solState.tdStateClass}>
                                     {renderReviewCell(
-                                      baseIdx + 7,
-                                      valAt(7, sas.solution),
+                                      baseIdx + solOff,
+                                      valAt(solOff, sas.solution),
                                       `Rencana Penyelesaian #${pIdx + 1}.${sIdx + 1}`,
                                     )}
                                   </td>
                                   <td className={solTimeState.tdStateClass}>
                                     {renderReviewCell(
-                                      baseIdx + 8,
-                                      valAt(8, sas.solutionTime),
+                                      baseIdx + solTimeOff,
+                                      valAt(solTimeOff, sas.solutionTime),
                                       `Waktu Penyelesaian #${pIdx + 1}.${sIdx + 1}`,
                                     )}
                                   </td>
                                   <td className={noteState.tdStateClass}>
                                     {renderReviewCell(
-                                      baseIdx + 9,
-                                      valAt(9, sas.notes),
+                                      baseIdx + noteOff,
+                                      valAt(noteOff, sas.notes),
                                       `Keterangan #${pIdx + 1}.${sIdx + 1}`,
+                                    )}
+                                    {canEditReview ? (
+                                      <select
+                                        id={`admin-late-status-${sas.id || rowCounter}`}
+                                        name={`lateStatus[${sas.id || rowCounter}]`}
+                                        className="admin-late-status-select"
+                                        aria-label={`Status keterlambatan sasaran ${rowCounter}`}
+                                        value={currentLateStatus}
+                                        onChange={(e) =>
+                                          setLateOverrides((prev) => ({
+                                            ...prev,
+                                            [sas.id]:
+                                              e.target.value as LateStatus,
+                                          }))
+                                        }
+                                      >
+                                        <option value="Tepat Waktu">
+                                          Status: Tepat Waktu
+                                        </option>
+                                        <option value="Terlambat">
+                                          Status: Terlambat
+                                        </option>
+                                        <option value="Pencapaian Terlambat">
+                                          Status: Pencapaian Terlambat
+                                        </option>
+                                      </select>
+                                    ) : (
+                                      currentLateStatus !== "Tepat Waktu" && (
+                                        <span
+                                          className={
+                                            currentLateStatus === "Terlambat"
+                                              ? "late-badge is-overdue"
+                                              : "late-badge is-late-done"
+                                          }
+                                        >
+                                          {currentLateStatus}
+                                        </span>
+                                      )
                                     )}
                                   </td>
                                   <td
@@ -2407,8 +2517,8 @@ export function Admin({
                                     style={{ wordBreak: "break-all" }}
                                   >
                                     {renderReviewCell(
-                                      baseIdx + 10,
-                                      valAt(10, sas.evidence),
+                                      baseIdx + evOff,
+                                      valAt(evOff, sas.evidence),
                                       `Link Evidence #${pIdx + 1}.${sIdx + 1}`,
                                       { isLink: true },
                                     )}
@@ -2465,8 +2575,8 @@ export function Admin({
                           </span>
                           <span>
                             {selected.type === "Sasaran Kinerja"
-                              ? "7 kolom"
-                              : "12 kolom"}
+                              ? "6 kolom"
+                              : "13 kolom"}
                           </span>
                         </div>
                       </div>

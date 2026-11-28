@@ -38,6 +38,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, string> 
   document_submitted: "Dokumen baru masuk",
   revision_resubmitted: "Perbaikan revisi dikirim ulang",
   deadline_reminder: "Pengingat tenggat",
+  master_strategy_updated: "Master Sasaran Strategis",
 }
 
 export type AdminReminderTemplate = {
@@ -574,7 +575,7 @@ export function collectRecipientNotifications({
   periods,
   year,
   quarter,
-  sessionSubUnit: _sessionSubUnit,
+  sessionSubUnit,
   legacyReadKeys = [],
   nowMs = Date.now(),
 }: {
@@ -588,15 +589,47 @@ export function collectRecipientNotifications({
   legacyReadKeys?: string[]
   nowMs?: number
 }): DisplayNotification[] {
+  const normalizedSub = sessionSubUnit?.trim().toLowerCase() ?? ""
+  const scopedRecords =
+    recipient === "staff" && normalizedSub
+      ? records.filter((r) => {
+          const code =
+            resolveOrganization(r)?.subUnit || r.subUnit || r.unit || ""
+          return code.trim().toLowerCase() === normalizedSub
+        })
+      : records
   const legacySet = new Set(legacyReadKeys)
-  const recordById = new Map(records.map((r) => [r.id, r]))
-  const explicitForRecipient = (storedNotifications ?? []).filter(
-    (item) =>
-      item.recipient === recipient &&
-      (recipient !== "staff" ||
-        item.category !== "admin_reminder" ||
-        isAdminReminderActive(item, nowMs)),
-  )
+  const recordById = new Map(scopedRecords.map((r) => [r.id, r]))
+  const explicitForRecipient = (storedNotifications ?? []).filter((item) => {
+    if (item.recipient !== recipient) return false
+    if (
+      recipient === "staff" &&
+      item.category === "admin_reminder" &&
+      !isAdminReminderActive(item, nowMs)
+    ) {
+      return false
+    }
+    if (recipient === "staff" && normalizedSub) {
+      if (
+        item.targetUnit?.trim() &&
+        item.targetUnit.trim().toLowerCase() !== normalizedSub
+      ) {
+        return false
+      }
+      if (
+        item.targetScope &&
+        item.targetScope !== "all" &&
+        Array.isArray(item.targetUnits)
+      ) {
+        if (item.targetUnits.length === 0) return false
+        const hit = item.targetUnits.some(
+          (u) => u.trim().toLowerCase() === normalizedSub,
+        )
+        if (!hit) return false
+      }
+    }
+    return true
+  })
 
   const coveredRecordStatuses = new Set<string>()
   for (const item of explicitForRecipient) {
@@ -626,7 +659,7 @@ export function collectRecipientNotifications({
   }
 
   if (recipient === "staff") {
-    for (const record of records) {
+    for (const record of scopedRecords) {
       if (record.status !== "Revisi" && record.status !== "Disetujui") continue
       if (coveredRecordStatuses.has(`${record.id}:${record.status}`)) continue
       const legacyKey = JSON.stringify([
@@ -670,7 +703,7 @@ export function collectRecipientNotifications({
 
     const reminders = buildDeadlineReminderNotifications({
       periods,
-      records,
+      records: scopedRecords,
       year,
       quarter,
       nowMs,

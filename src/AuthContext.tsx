@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react"
 import type { ReactNode } from "react"
-import type { AuthSession, LoginResult } from "../types"
+import type { AuthSession, LoginResult } from "./types"
 import {
   AUTH_STORAGE_KEY,
   browserAuthAdapter,

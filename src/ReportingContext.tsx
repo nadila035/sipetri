@@ -5,12 +5,17 @@ import {
   createEmptyTriwulanProgram,
   createEmptyTriwulanSasaran,
 } from "./utils/drafts"
+import {
+  DEFAULT_STRATEGIC_GOALS,
+  normalizeStrategicGoals,
+} from "./utils/strategicGoals"
 import { localNotificationTransport } from "./utils/notificationTransport"
 import type { Period } from "./utils/workflow"
 import type {
   AppNotification,
   CriteriaItem,
   HistoryRecord,
+  MasterStrategicGoal,
   ReportRow,
   TriwulanProgramItem,
   TriwulanSasaranItem,
@@ -22,6 +27,7 @@ export type ReportingData = {
   availableYears: string[]
   yearsReset2026?: boolean
   defaultHistoryCleared?: boolean
+  strategicGoals: MasterStrategicGoal[]
   criteria: CriteriaItem[]
   drafts: Record<string, any[]>
   draftUpdatedAt?: Record<string, string>
@@ -45,8 +51,23 @@ const ReportingContext = createContext<{
   setData: Dispatch<SetStateAction<ReportingData>>
   savedDraftUpdatedAt: Record<string, string>
   storageError: string
+  nowMs: number
 } | null>(null)
+
 const storageKey = "quarterly-reporting-v1"
+const REALTIME_STATE_CHANNEL = "sipetri-realtime-sync-v1"
+
+function getRealtimeTabId(): string {
+  const holder = globalThis as Record<string, unknown>
+  const key = "__sipetriRealtimeTabId"
+  if (typeof holder[key] === "string") return holder[key] as string
+  const id =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `tab-${Math.random().toString(36).slice(2)}`
+  holder[key] = id
+  return id
+}
 
 export const emptyTriwulanSasaran = (id?: string): TriwulanSasaranItem =>
   createEmptyTriwulanSasaran(id)
@@ -55,6 +76,7 @@ export const emptyTriwulanProgram = (id?: string): TriwulanProgramItem =>
   createEmptyTriwulanProgram(id)
 
 export const emptyReportRow = (): ReportRow => ({
+  strategicGoal: "",
   program: "",
   target: "",
   monthStart: "",
@@ -179,6 +201,9 @@ function parseStoredReportingData(
         : Array.isArray(saved.availableYears)
           ? saved.availableYears
           : undefined
+      const strategicGoals = Array.isArray(saved.strategicGoals)
+        ? normalizeStrategicGoals(saved.strategicGoals)
+        : structuredClone(DEFAULT_STRATEGIC_GOALS)
       return {
         status: "ok",
         data: {
@@ -187,6 +212,7 @@ function parseStoredReportingData(
           periods,
           records: cleanedRecords,
           notifications,
+          strategicGoals,
           yearsReset2026: true,
           defaultHistoryCleared: true,
           availableYears: collectReportingYears({
@@ -217,6 +243,9 @@ export function ReportingProvider({
   const [loadError, setLoadError] = useState(false)
   const skipNextPersistRef = useRef(false)
   const lastPersistedRawRef = useRef<string | null>(null)
+  const senderTabId = getRealtimeTabId()
+  const [nowMs, setNowMs] = useState<number>(() => Date.now())
+
   const [data, setData] = useState<ReportingData>(() => {
     const year = "2026"
     const initial: ReportingData = {
@@ -225,6 +254,7 @@ export function ReportingProvider({
       availableYears: ["2026", "2025", "2024"],
       yearsReset2026: true,
       defaultHistoryCleared: true,
+      strategicGoals: structuredClone(DEFAULT_STRATEGIC_GOALS),
       records,
       notifications: [],
       drafts: {},
@@ -248,6 +278,13 @@ export function ReportingProvider({
   useUnsavedChanges(!!storageError)
 
   useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNowMs(Date.now())
+    }, 15_000)
+    return () => window.clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
     const applyExternalRaw = (raw: string | null) => {
       if (!raw || raw === lastPersistedRawRef.current) return
       const parsed = parseStoredReportingData(raw)
@@ -263,18 +300,44 @@ export function ReportingProvider({
       applyExternalRaw(event.newValue)
     }
     window.addEventListener("storage", handleStorage)
+
+    let stateChannel: BroadcastChannel | null = null
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        stateChannel = new BroadcastChannel(REALTIME_STATE_CHANNEL)
+        stateChannel.addEventListener("message", (event) => {
+          const payload = event.data as
+            | { senderTabId?: string; raw?: string }
+            | undefined
+          if (!payload || payload.senderTabId === senderTabId) return
+          if (typeof payload.raw === "string") {
+            applyExternalRaw(payload.raw)
+          } else {
+            try {
+              applyExternalRaw(localStorage.getItem(storageKey))
+            } catch {
+              // Ignore restricted storage read.
+            }
+          }
+        })
+      } catch {
+        stateChannel = null
+      }
+    }
+
     const unsubscribeTransport = localNotificationTransport.subscribe(() => {
       try {
         applyExternalRaw(localStorage.getItem(storageKey))
       } catch {
-        // Abaikan jika penyimpanan browser tidak tersedia.
+        // Ignore restricted storage read.
       }
     })
     return () => {
       window.removeEventListener("storage", handleStorage)
+      stateChannel?.close()
       unsubscribeTransport()
     }
-  }, [])
+  }, [senderTabId])
 
   useEffect(() => {
     if (loadError) {
@@ -295,15 +358,26 @@ export function ReportingProvider({
       lastPersistedRawRef.current = serialized
       setSavedDraftUpdatedAt(data.draftUpdatedAt ?? {})
       setStorageError("")
+
+      if (typeof BroadcastChannel !== "undefined") {
+        try {
+          const ch = new BroadcastChannel(REALTIME_STATE_CHANNEL)
+          ch.postMessage({ senderTabId, raw: serialized })
+          ch.close()
+        } catch {
+          // Ignore BroadcastChannel restrictions.
+        }
+      }
     } catch {
       setStorageError(
         "Penyimpanan browser gagal. Data sesi belum tersimpan; kosongkan ruang penyimpanan sebelum menutup halaman.",
       )
     }
-  }, [data, loadError])
+  }, [data, loadError, senderTabId])
+
   return (
     <ReportingContext.Provider
-      value={{ data, setData, savedDraftUpdatedAt, storageError }}
+      value={{ data, setData, savedDraftUpdatedAt, storageError, nowMs }}
     >
       {storageError && <div role="alert">{storageError}</div>}
       {children}

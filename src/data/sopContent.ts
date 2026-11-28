@@ -65,7 +65,7 @@ export const SOP_STAFF_DOC: SopDocumentSpec = {
         "Memastikan staf berhasil masuk ke ruang kerja unit, mengetahui periode pelaporan yang sedang aktif, membaca batas waktu resmi WIB, dan menindaklanjuti pengingat dari Admin PRP.",
       steps: [
         'Buka halaman depan Portal SIPETRI, lalu klik tombol "Masuk Aplikasi" di bagian atas atau klik kartu "Gerbang Masuk SIPETRI" ("Buka Halaman Login").',
-        'Pada halaman "Masuk Akun", ketik username akun unit kerja Anda (contoh: "unit" atau sesuai akun yang diberikan pengelola) pada kolom "Username" dan isi "Kata Sandi", kemudian klik tombol "Masuk".',
+        'Pada halaman "Masuk Akun", ketik kode akun unit kerja Anda (contoh: "fket", "ftik", "baum", "bpk", "pjm") pada kolom "Username Akun / Kode Unit" dan isi "Kata Sandi", kemudian klik tombol "Masuk". Sistem mengunci identitas unit organisasi secara otomatis sesuai sesi login aktif.',
         'Setelah masuk ke menu "Dashboard", baca kalimat status pada kartu biru sambutan untuk memastikan Tahun dan Triwulan default yang sedang dibuka Admin PRP.',
         'Periksa kartu "Batas pengumpulan" di sisi kanan atas untuk melihat tanggal tenggat, sisa hari pengumpulan, dan indikator progres waktu.',
         'Periksa bagian atas halaman: jika muncul banner "Pengingat Mendesak" (merah) atau "Pengingat Penting" (kuning) dari Admin PRP, klik tombol pintas "Buka [Nama Menu]" untuk langsung mengerjakan tugas atau klik "Tandai dibaca" setelah instruksi dipahami.',
@@ -96,14 +96,13 @@ export const SOP_STAFF_DOC: SopDocumentSpec = {
       purpose:
         "Mencatat target rencana kerja tahunan (Kriteria, Strategi, Program Kerja, dan Sasaran) dari salah satu dari 42 unit kerja sebagai acuan pelaporan Triwulan I sampai IV.",
       steps: [
-        'Klik menu "Isi Sasaran Kinerja" pada sidebar kiri (atau kartu pintasan "Isi Sasaran Kinerja" di Dashboard).',
-        'Pada kotak "Periode Sasaran Tahunan", pilih tahun pelaporan pada dropdown "Tahun RKA / Sasaran" yang berstatus "[Dibuka]".',
-        'Pada kotak "Unit Organisasi", pilih "Unit Utama" lalu pilih "Sub Unit / Bagian" dari 42 unit kerja. Untuk unit mandiri tanpa sub-bagian (FKET, FTBE, FTIK, FTEN, PASCASARJANA, VOKASI, PJM, SPI, dan Perpustakaan), cukup pilih Unit Utama karena kolom Sub Unit akan terisi otomatis.',
-        'Isi hierarki rencana secara berurutan: ketik "Kriteria" (Level 1), lanjutkan "Strategi" (Level 2), lalu ketik nama "Program" (Level 3). Gunakan tombol "+ Tambah Kriteria", "+ Tambah Strategi", atau "+ Tambah Program" bila memiliki lebih dari satu entri.',
-        'Di dalam setiap Program, isi "Uraian Sasaran", pilih "Bulan Pelaksanaan" (kolom Bulan mulai wajib diisi; Bulan selesai opsional dan dikosongkan bila kegiatan hanya 1 bulan), serta isi "Keterangan" bila diperlukan. Klik "+ Tambah Sasaran" jika satu program memiliki beberapa sasaran.',
-        'Klik tombol "Simpan Draf" di bilah bawah agar indikator kanan atas berubah menjadi "Draf tersimpan" dan fitur simpan otomatis browser aktif.',
-        'Klik tombol "Pratinjau" untuk memeriksa tabel resmi 7 kolom. Untuk mengecek tampilan cetak berformat A4 Landscape berkop ITPLN sebelum dikirim, klik "Cetak Sasaran Kinerja (PDF)" di dalam panel pratinjau.',
-        'Jika seluruh data telah benar, klik tombol "Kirim Sasaran", periksa ringkasan konfirmasi, lalu klik "Ya, Kirim Sasaran" hingga status dokumen berubah menjadi "Menunggu".',
+        'Klik menu "Isi Sasaran Kinerja" pada sidebar kiri (tahap pertama wajib sebelum Laporan Triwulan dapat dibuka).',
+        'Pada kotak "Periode Sasaran Tahunan", pilih tahun pelaporan pada dropdown "Tahun RKA / Sasaran" yang berstatus "[Dibuka]". Identitas Unit Utama dan Sub Unit / Bagian sudah terkunci otomatis sesuai akun unit Anda.',
+        'Klik tombol "+ Tambah Program / Sasaran" untuk membuka jendela pop-up pengisian baris pada tabel resmi 6 kolom berheader hijau.',
+        'Pilih "Sasaran Strategis" dari menu dropdown (master pilihan dikelola terpusat oleh Admin/Renbang), isi nama "Program Kerja", "Sasaran Kinerja", "Bulan Mulai" serta "Bulan Selesai" (opsional), dan "Keterangan".',
+        'Klik tombol "Simpan Draf" di dalam pop-up atau di bilah bawah agar progres tersimpan bertahap di penyimpanan browser sebelum pengiriman final.',
+        'Klik tombol "Pratinjau" untuk memeriksa tabel resmi 6 kolom berheader hijau atau mencetak dokumen A4 Landscape berkop ITPLN.',
+        'Jika seluruh baris telah lengkap, klik "Kirim Sasaran" lalu konfirmasi "Ya, Kirim Sasaran". Begitu disetujui (ACC) oleh Admin PRP, seluruh data otomatis tertarik ke lembar kerja Laporan Triwulan.',
       ],
       mandatoryTitle: "Aturan Wajib Penyusunan & Penyimpanan Draf RKA",
       mandatoryRules: [
@@ -130,14 +129,13 @@ export const SOP_STAFF_DOC: SopDocumentSpec = {
       purpose:
         "Melaporkan capaian pelaksanaan program kerja per triwulan lengkap dengan persentase realisasi, tautan bukti dukung (evidence), serta tindak lanjut kendala bila capaian belum 100%.",
       steps: [
-        'Klik menu "Isi Laporan Triwulan" pada sidebar kiri.',
-        'Pada kotak "Periode Laporan", pilih "Triwulan" (Triwulan I sampai IV yang berstatus "[Dibuka]") dan "Tahun". Bila ingin kembali ke jadwal berjalan, klik tombol "Gunakan periode aktif".',
-        'Pada kotak "Unit Organisasi", pilih "Unit Utama" dan "Sub Unit / Bagian" yang sama persis dengan unit pada dokumen Sasaran Kinerja Tahunan Anda.',
-        'Klik tombol "Impor dari Sasaran Kinerja" untuk menarik daftar Program Kerja, Sasaran, dan Bulan Pelaksanaan dari RKA tahun tersebut secara otomatis, atau klik "+ Tambah Program" dan "+ Tambah Sasaran" bila ingin mengisi secara manual.',
-        'Pada setiap sasaran, lengkapi kolom wajib: "Tahap Pelaksanaan (Uraian)", "Realisasi Pelaksanaan (Uraian)", serta angka "Realisasi Pelaksanaan (%)" (rentang 0 sampai 100).',
-        'Isi kolom "Keterangan" (opsional) dan tempelkan alamat bukti dukung pada kolom "Link Evidence" (misalnya tautan folder/berkas Google Drive yang akses bacanya sudah dibuka untuk verifikator).',
-        'Apabila nilai "Realisasi Pelaksanaan (%)" diisi di bawah 100%, lengkapi tiga kolom pada blok "Penanganan Kendala" yang otomatis aktif: "Kendala", "Rencana Penyelesaian Kendala", dan "Waktu Penyelesaian Kendala".',
-        'Klik "Simpan Draf" bila pengisian masih akan dilanjutkan nanti, atau klik "Pratinjau" untuk meninjau tabel resmi 12 kolom, lalu klik "Kirim Laporan" dan konfirmasi dengan klik "Ya, Kirim Laporan".',
+        'Pastikan Sasaran Kinerja tahun berjalan unit Anda telah berstatus "Disetujui" (ACC) oleh Admin PRP sehingga menu "Isi Laporan Triwulan" otomatis terbuka.',
+        'Klik menu "Isi Laporan Triwulan" untuk melihat grid tabel 13 kolom yang telah terisi otomatis dengan Sasaran Strategis, Program Kerja, Sasaran, dan Bulan Pelaksanaan dari RKA unit.',
+        'Klik baris program kerja atau tombol "Isi Progres" pada kolom aksi untuk membuka jendela pop-up pengisian progres.',
+        'Di dalam jendela pop-up, lengkapi "Tahap Pelaksanaan (Uraian)", "Realisasi Pelaksanaan (Uraian)", serta angka akumulatif "Realisasi Pelaksanaan (%)" (melanjutkan capaian triwulan sebelumnya hingga 100%).',
+        'Apabila nilai "Realisasi Pelaksanaan (%)" masih di bawah 100%, lengkapi kolom merah muda: "Kendala", "Rencana Penyelesaian Kendala", dan "Waktu Penyelesaian Kendala".',
+        'Isi "Keterangan" dan tempelkan tautan dokumen pada "Link Evidence", lalu gunakan tombol "Simpan Draf" di dalam pop-up untuk menyimpan bertahap sebelum klik "Kirim Laporan".',
+        'Program yang belum mencapai 100% otomatis terbuka kembali (carry-over) di triwulan berikutnya dengan status "Terlambat" / "Pencapaian Terlambat", sedangkan program yang sudah tervalidasi 100% otomatis terkunci (Close 100%). Pantau tunggakan melalui menu "Monitoring Keterlambatan".',
       ],
       mandatoryTitle: "Aturan Wajib Impor RKA & Realisasi di Bawah 100%",
       mandatoryRules: [

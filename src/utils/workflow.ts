@@ -14,6 +14,30 @@ export type PeriodStatus =
 
 export const deadlineTimezone = "Asia/Jakarta"
 
+export const QUARTER_ORDER = ["I", "II", "III", "IV"] as const
+export type QuarterCode = (typeof QUARTER_ORDER)[number]
+
+export function quarterIndex(quarter: string): number {
+  const idx = QUARTER_ORDER.indexOf(quarter.trim().toUpperCase() as QuarterCode)
+  return idx >= 0 ? idx : 0
+}
+
+export function compareQuarters(a: string, b: string): number {
+  return quarterIndex(a) - quarterIndex(b)
+}
+
+export function quarterFromMonth(yyyyMm?: string): QuarterCode | null {
+  if (!yyyyMm) return null
+  const match = yyyyMm.trim().match(/^(\d{4})-(\d{2})$/)
+  if (!match) return null
+  const month = Number(match[2])
+  if (month >= 1 && month <= 3) return "I"
+  if (month >= 4 && month <= 6) return "II"
+  if (month >= 7 && month <= 9) return "III"
+  if (month >= 10 && month <= 12) return "IV"
+  return null
+}
+
 function parseJakartaDateParts(value: string): {
   year: number
   month: number
@@ -166,8 +190,9 @@ export function formatPeriodStatusTag(status: PeriodStatus): string {
 export function describePeriodLockReason(
   period?: Period,
   labelPrefix = "Periode ini",
+  now = Date.now(),
 ): string {
-  const state = getPeriodState(period)
+  const state = getPeriodState(period, now)
   if (state.status === "upcoming") {
     return `${labelPrefix} baru dibuka mulai ${formatJakartaDate(period?.startDate)}.`
   }
@@ -219,8 +244,11 @@ export function formatPeriodWindow(period?: Period): string {
   return period.open ? "Dibuka (Tanpa Batas Waktu)" : "Belum dijadwalkan"
 }
 
-export function formatDeadlineSummary(period?: Period): string {
-  const state = getPeriodState(period)
+export function formatDeadlineSummary(
+  period?: Period,
+  now = Date.now(),
+): string {
+  const state = getPeriodState(period, now)
   const deadlineStr = period?.deadline?.trim() ?? ""
   if (deadlineStr && state.status !== "invalid" && state.deadlineAt !== null) {
     return `${formatJakartaDate(deadlineStr)}${state.canSubmit ? "" : " (Terkunci)"}`

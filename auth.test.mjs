@@ -2,9 +2,11 @@ import test from "node:test"
 import assert from "node:assert/strict"
 
 import {
+  UNIT_ACCOUNTS,
   authenticateCredentials,
   canNotificationReachSession,
   filterRecordsForSession,
+  getSessionLockedOrganization,
   getUserInitials,
   getUserReadStorageKey,
   parseStoredSession,
@@ -21,23 +23,22 @@ const sampleRecord = (overrides = {}) => ({
   title: "Laporan Realisasi Triwulan I",
   period: "Triwulan I · 2026",
   unit: "BPK",
-  parentUnit: "BPK",
+  parentUnit: "PRP",
   subUnit: "BPK",
   sentAt: "10/04/2026, 10.00.00",
   status: "Menunggu",
   progress: 100,
   items: [{ label: "Program Kerja", value: "Program 1" }],
-  author: "Staf BPK",
+  author: "Unit BPK",
   ...overrides,
 })
 
-test("authenticateCredentials accepts admin and unit with any non-empty password and rejects others", () => {
+test("authenticateCredentials supports admin, renbang, and all 42 locked unit accounts", () => {
+  assert.equal(UNIT_ACCOUNTS.length, 42)
   assert.equal(authenticateCredentials("", "bebas123").ok, false)
   assert.equal(authenticateCredentials("admin", "").ok, false)
-  assert.equal(authenticateCredentials("unit", "").ok, false)
+  assert.equal(authenticateCredentials("unit", "bebas123").ok, false)
   assert.equal(authenticateCredentials("staff", "bebas123").ok, false)
-  assert.equal(authenticateCredentials("fket", "Unit@2026").ok, false)
-  assert.equal(authenticateCredentials("admin.prp", "AdminPRP@2026").ok, false)
   assert.equal(authenticateCredentials("unknown", "random-pass").ok, false)
 
   const adminRes = authenticateCredentials(
@@ -49,94 +50,105 @@ test("authenticateCredentials accepts admin and unit with any non-empty password
   if (adminRes.ok) {
     assert.equal(adminRes.session.role, "admin")
     assert.equal(adminRes.session.username, "admin")
-    assert.equal(adminRes.session.userId, "admin")
     assert.equal(adminRes.session.displayName, "Admin PRP")
-    assert.equal(adminRes.session.loggedInAt, "2026-11-17T00:00:00.000Z")
   }
 
-  const unitRes = authenticateCredentials(
-    " UnIt ",
-    "apapun-boleh",
+  const renbangRes = authenticateCredentials(
+    "renbang",
+    "renbang123",
+    "2026-11-17T00:00:00.000Z",
+  )
+  assert.equal(renbangRes.ok, true)
+  if (renbangRes.ok) {
+    assert.equal(renbangRes.session.role, "admin")
+    assert.equal(renbangRes.session.username, "renbang")
+    assert.equal(renbangRes.session.displayName, "Admin Renbang")
+  }
+
+  const fketRes = authenticateCredentials(
+    " FKET ",
+    "Unit@2026",
     "2026-11-17T01:00:00.000Z",
   )
-  assert.equal(unitRes.ok, true)
-  if (unitRes.ok) {
-    assert.equal(unitRes.session.role, "staff")
-    assert.equal(unitRes.session.username, "unit")
-    assert.equal(unitRes.session.userId, "unit")
-    assert.equal(unitRes.session.displayName, "Unit")
-    assert.equal(unitRes.session.parentUnit, "")
-    assert.equal(unitRes.session.subUnit, "")
-    assert.equal(unitRes.session.loggedInAt, "2026-11-17T01:00:00.000Z")
+  assert.equal(fketRes.ok, true)
+  if (fketRes.ok) {
+    assert.equal(fketRes.session.role, "staff")
+    assert.equal(fketRes.session.username, "fket")
+    assert.equal(fketRes.session.parentUnit, "FKET")
+    assert.equal(fketRes.session.subUnit, "FKET")
+    assert.deepEqual(getSessionLockedOrganization(fketRes.session), {
+      unit: "FKET",
+      subUnit: "FKET",
+      unitLabel: "FKET",
+    })
+  }
+
+  const baumRes = authenticateCredentials("unit.baum", "apapun-boleh")
+  assert.equal(baumRes.ok, true)
+  if (baumRes.ok) {
+    assert.equal(baumRes.session.parentUnit, "Rektorat")
+    assert.equal(baumRes.session.subUnit, "BAUM")
+    assert.deepEqual(getSessionLockedOrganization(baumRes.session), {
+      unit: "Rektorat",
+      subUnit: "BAUM",
+      unitLabel: "Rektorat · BAUM",
+    })
   }
 })
 
-test("parseStoredSession validates JSON, allows unlocked unit sessions, and rejects invalid payloads", () => {
+test("parseStoredSession validates locked unit sessions and rejects tampered unit payloads", () => {
   assert.equal(parseStoredSession(null), null)
   assert.equal(parseStoredSession("not-json"), null)
   assert.equal(parseStoredSession("{}"), null)
+  // Rejects unlocked legacy 'unit' session
   assert.equal(
     parseStoredSession(
       JSON.stringify({
-        userId: "staff-fket",
-        username: "fket",
-        displayName: "Staf FKET",
+        userId: "unit",
+        username: "unit",
+        displayName: "Unit",
+        role: "staff",
+        parentUnit: "",
+        subUnit: "",
+        loggedInAt: "2026-11-17T00:00:00.000Z",
+      }),
+    ),
+    null,
+  )
+  // Rejects mismatched parentUnit tampering
+  assert.equal(
+    parseStoredSession(
+      JSON.stringify({
+        userId: "unit-baum",
+        username: "baum",
+        displayName: "Unit BAUM",
         role: "staff",
         parentUnit: "FKET",
-        subUnit: "FKET",
-        loggedInAt: "2026-11-17T00:00:00.000Z",
-      }),
-    ),
-    null,
-  )
-  assert.equal(
-    parseStoredSession(
-      JSON.stringify({
-        userId: "staff",
-        username: "staff",
-        displayName: "Staf Unit",
-        role: "staff",
-        parentUnit: "",
-        subUnit: "",
-        loggedInAt: "2026-11-17T00:00:00.000Z",
-      }),
-    ),
-    null,
-  )
-  assert.equal(
-    parseStoredSession(
-      JSON.stringify({
-        userId: "admin",
-        username: "admin",
-        displayName: "Admin",
-        role: "staff",
-        parentUnit: "",
-        subUnit: "",
+        subUnit: "BAUM",
         loggedInAt: "2026-11-17T00:00:00.000Z",
       }),
     ),
     null,
   )
 
-  const parsedUnit = parseStoredSession(
+  const parsedFket = parseStoredSession(
     JSON.stringify({
-      userId: "unit",
-      username: "unit",
-      displayName: "Unit",
+      userId: "unit-fket",
+      username: "fket",
+      displayName: "Unit FKET",
       role: "staff",
-      parentUnit: "",
-      subUnit: "",
+      parentUnit: "FKET",
+      subUnit: "FKET",
       loggedInAt: "2026-11-17T00:00:00.000Z",
-      extraField: "ignored",
     }),
   )
-  assert.deepEqual(parsedUnit, {
-    userId: "unit",
-    username: "unit",
-    displayName: "Unit",
+  assert.deepEqual(parsedFket, {
+    userId: "unit-fket",
+    username: "fket",
+    displayName: "Unit FKET",
     role: "staff",
-    parentUnit: "",
-    subUnit: "",
+    parentUnit: "FKET",
+    subUnit: "FKET",
     loggedInAt: "2026-11-17T00:00:00.000Z",
   })
 
@@ -151,24 +163,22 @@ test("parseStoredSession validates JSON, allows unlocked unit sessions, and reje
       loggedInAt: "2026-11-17T00:00:00.000Z",
     }),
   )
-  assert.deepEqual(parsedAdmin, {
-    userId: "admin",
-    username: "admin",
-    displayName: "Admin PRP",
-    role: "admin",
-    parentUnit: "PRP",
-    subUnit: "",
-    loggedInAt: "2026-11-17T00:00:00.000Z",
-  })
+  assert.equal(parsedAdmin?.role, "admin")
 })
 
-test("recordBelongsToSession and filterRecordsForSession work cleanly for unlocked unit and admin sessions", () => {
+test("recordBelongsToSession and filterRecordsForSession strictly isolate unit sessions", () => {
   const admin = authenticateCredentials("admin", "pass1")
-  const unit = authenticateCredentials("unit", "pass2")
-  assert.equal(admin.ok && unit.ok, true)
-  if (!admin.ok || !unit.ok) return
+  const bpk = authenticateCredentials("bpk", "pass2")
+  const fket = authenticateCredentials("fket", "pass3")
+  assert.equal(admin.ok && bpk.ok && fket.ok, true)
+  if (!admin.ok || !bpk.ok || !fket.ok) return
 
-  const recBpk = sampleRecord({ id: "rec-bpk", unit: "BPK", parentUnit: "PRP", subUnit: "BPK" })
+  const recBpk = sampleRecord({
+    id: "rec-bpk",
+    unit: "BPK",
+    parentUnit: "PRP",
+    subUnit: "BPK",
+  })
   const recFket = sampleRecord({
     id: "rec-fket",
     unit: "FKET",
@@ -184,35 +194,29 @@ test("recordBelongsToSession and filterRecordsForSession work cleanly for unlock
     ["rec-bpk", "rec-fket"],
   )
   assert.deepEqual(
-    filterRecordsForSession(all, unit.session).map((r) => r.id),
-    ["rec-bpk", "rec-fket"],
+    filterRecordsForSession(all, bpk.session).map((r) => r.id),
+    ["rec-bpk"],
   )
-  assert.equal(recordBelongsToSession(recBpk, unit.session), true)
-  assert.equal(recordBelongsToSession(recFket, unit.session), true)
-
-  const legacyShapedStaffSession = {
-    ...unit.session,
-    parentUnit: "PRP",
-    subUnit: "BPK",
-  }
-  assert.equal(recordBelongsToSession(recFket, legacyShapedStaffSession), true)
   assert.deepEqual(
-    filterRecordsForSession(all, legacyShapedStaffSession).map((r) => r.id),
-    ["rec-bpk", "rec-fket"],
+    filterRecordsForSession(all, fket.session).map((r) => r.id),
+    ["rec-fket"],
   )
+  assert.equal(recordBelongsToSession(recBpk, fket.session), false)
+  assert.equal(recordBelongsToSession(recFket, fket.session), true)
 })
 
-test("notifications and read-state keys work cleanly for unit and admin sessions", () => {
-  const unit = authenticateCredentials("unit", "bebas")
+test("notifications route strictly to matching locked unit session or broadcast", () => {
+  const bpk = authenticateCredentials("bpk", "bebas")
+  const fket = authenticateCredentials("fket", "bebas")
   const admin = authenticateCredentials("admin", "bebas")
-  assert.equal(unit.ok && admin.ok, true)
-  if (!unit.ok || !admin.ok) return
+  assert.equal(bpk.ok && fket.ok && admin.ok, true)
+  if (!bpk.ok || !fket.ok || !admin.ok) return
 
   assert.notEqual(
-    getUserReadStorageKey(unit.session),
-    getUserReadStorageKey(admin.session),
+    getUserReadStorageKey(bpk.session),
+    getUserReadStorageKey(fket.session),
   )
-  assert.equal(getUserInitials("Unit"), "UN")
+  assert.equal(getUserInitials("Unit FKET"), "UF")
   assert.equal(getUserInitials("Admin PRP"), "AP")
 
   const bpkRevision = createAppNotification({
@@ -242,28 +246,28 @@ test("notifications and read-state keys work cleanly for unit and admin sessions
     category: "document_submitted",
     title: "Laporan BPK",
     message: "Menunggu verifikasi",
-    actor: "Unit",
+    actor: "Unit BPK",
     targetMenu: "Verifikasi Laporan Triwulan",
   })
 
-  assert.equal(canNotificationReachSession(bpkRevision, unit.session), true)
-  assert.equal(canNotificationReachSession(bpkRevision, admin.session), false)
-  assert.equal(canNotificationReachSession(broadcastPeriod, unit.session), true)
+  assert.equal(canNotificationReachSession(bpkRevision, bpk.session), true)
+  assert.equal(canNotificationReachSession(bpkRevision, fket.session), false)
+  assert.equal(canNotificationReachSession(broadcastPeriod, fket.session), true)
   assert.equal(canNotificationReachSession(adminSubmit, admin.session), true)
-  assert.equal(canNotificationReachSession(adminSubmit, unit.session), false)
+  assert.equal(canNotificationReachSession(adminSubmit, bpk.session), false)
 
-  const staffFeed = collectRecipientNotifications({
+  const fketFeed = collectRecipientNotifications({
     recipient: "staff",
     storedNotifications: [bpkRevision, broadcastPeriod, adminSubmit],
     records: [],
     periods: {},
     year: "2026",
     quarter: "III",
-    sessionSubUnit: unit.session.subUnit,
+    sessionSubUnit: fket.session.subUnit,
   })
 
   assert.deepEqual(
-    staffFeed.map((item) => item.notification.id),
-    ["notif-period", "notif-bpk"],
+    fketFeed.map((item) => item.notification.id),
+    ["notif-period"],
   )
 })

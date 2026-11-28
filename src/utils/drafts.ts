@@ -47,6 +47,7 @@ export function createEmptyWorkProgram(): WorkProgram {
 export function createEmptyStrategy(): StrategyItem {
   return {
     id: makeId("strategy"),
+    strategicGoalId: "",
     name: "",
     programs: [createEmptyWorkProgram()],
   }
@@ -65,6 +66,8 @@ export function createEmptyCriteria(): CriteriaItem {
 export function createEmptyTriwulanSasaran(id?: string): TriwulanSasaranItem {
   return {
     id: id || makeId("tw-sasaran"),
+    strategicGoalId: "",
+    strategicGoal: "",
     target: "",
     monthStart: "",
     monthEnd: "",
@@ -83,21 +86,19 @@ export function createEmptyTriwulanSasaran(id?: string): TriwulanSasaranItem {
 export function createEmptyTriwulanProgram(id?: string): TriwulanProgramItem {
   return {
     id: id || makeId("tw-program"),
+    strategicGoalId: "",
+    strategicGoal: "",
     program: "",
     sasaranList: [createEmptyTriwulanSasaran()],
   }
 }
 
-/**
- * Sisipkan item baru pada posisi indeks tertentu tanpa mengubah item lain,
- * sehingga penomoran urut berikutnya otomatis bergeser (auto-increment).
- */
 export function insertItemAt<T>(items: T[], index: number, item: T): T[] {
   const bounded = Math.max(0, Math.min(index, items.length))
   return [...items.slice(0, bounded), item, ...items.slice(bounded)]
 }
 
-function getStrategies(item: CriteriaItem): StrategyItem[] {
+export function getStrategies(item: CriteriaItem): StrategyItem[] {
   return Array.isArray(item.strategies) && item.strategies.length > 0
     ? item.strategies
     : item.strategy
@@ -105,7 +106,7 @@ function getStrategies(item: CriteriaItem): StrategyItem[] {
       : []
 }
 
-function getProgramSasaran(program: WorkProgram): SasaranItem[] {
+export function getProgramSasaran(program: WorkProgram): SasaranItem[] {
   if (Array.isArray(program.sasaranList) && program.sasaranList.length > 0) {
     return program.sasaranList.map((s) => ({
       id: s.id || makeId("sasaran"),
@@ -148,7 +149,14 @@ export function normalizeCriteriaList(raw: unknown): CriteriaItem[] {
       rawStrategies.length > 0 ? rawStrategies : [createEmptyStrategy()]
     ).map((s: any) => ({
       id: s?.id || makeId("strategy"),
-      name: typeof s?.name === "string" ? s.name : "",
+      strategicGoalId:
+        typeof s?.strategicGoalId === "string" ? s.strategicGoalId : "",
+      name:
+        typeof s?.name === "string" && s.name
+          ? s.name
+          : typeof c?.name === "string"
+            ? c.name
+            : "",
       programs: (
         Array.isArray(s?.programs) && s.programs.length > 0
           ? s.programs
@@ -169,9 +177,13 @@ export function normalizeCriteriaList(raw: unknown): CriteriaItem[] {
         }
       }),
     }))
+    const syncedName =
+      typeof c?.name === "string" && c.name
+        ? c.name
+        : strategies[0]?.name || ""
     return {
       id: c?.id || makeId("criteria"),
-      name: typeof c?.name === "string" ? c.name : "",
+      name: syncedName,
       strategy: strategies[0],
       strategies,
     }
@@ -182,12 +194,30 @@ export function normalizeTriwulanPrograms(raw: unknown): TriwulanProgramItem[] {
   if (!Array.isArray(raw) || raw.length === 0) return [createEmptyTriwulanProgram()]
   return raw.map((r: any, idx: number) => {
     if (Array.isArray(r?.sasaranList) && r.sasaranList.length > 0) {
+      const progGoal =
+        r?.strategicGoal ||
+        r.sasaranList[0]?.strategicGoal ||
+        r.sasaranList[0]?.annualSource?.strategicGoal ||
+        ""
+      const progGoalId =
+        r?.strategicGoalId ||
+        r.sasaranList[0]?.strategicGoalId ||
+        r.sasaranList[0]?.annualSource?.strategicGoalId ||
+        ""
       return {
         id: r.id || `program-${idx + 1}`,
+        strategicGoalId: progGoalId,
+        strategicGoal: progGoal,
         program: r.program || "",
         sasaranList: r.sasaranList.map((s: any, sIdx: number) => ({
           annualSource: s?.annualSource,
           id: s?.id || `sasaran-${idx + 1}-${sIdx + 1}`,
+          strategicGoalId:
+            s?.strategicGoalId ||
+            s?.annualSource?.strategicGoalId ||
+            progGoalId,
+          strategicGoal:
+            s?.strategicGoal || s?.annualSource?.strategicGoal || progGoal,
           target: s?.target || s?.sasaran || "",
           monthStart: s?.monthStart || s?.bulan_mulai || "",
           monthEnd: s?.monthEnd || s?.bulan_selesai || "",
@@ -198,6 +228,34 @@ export function normalizeTriwulanPrograms(raw: unknown): TriwulanProgramItem[] {
             s?.percentage !== undefined && s?.percentage !== null
               ? String(s.percentage)
               : "",
+          ...(typeof s?.priorPercentage === "number"
+            ? { priorPercentage: s.priorPercentage }
+            : {}),
+          ...(typeof s?.carryOverFromQuarter === "string" &&
+          s.carryOverFromQuarter
+            ? { carryOverFromQuarter: s.carryOverFromQuarter }
+            : {}),
+          ...(typeof s?.startQuarter === "string" && s.startQuarter
+            ? { startQuarter: s.startQuarter }
+            : {}),
+          ...(typeof s?.targetQuarter === "string" && s.targetQuarter
+            ? { targetQuarter: s.targetQuarter }
+            : {}),
+          ...(typeof s?.isLockedCompleted === "boolean"
+            ? { isLockedCompleted: s.isLockedCompleted }
+            : {}),
+          ...(typeof s?.completedInQuarter === "string" && s.completedInQuarter
+            ? { completedInQuarter: s.completedInQuarter }
+            : {}),
+          ...(typeof s?.lateStatus === "string" && s.lateStatus
+            ? { lateStatus: s.lateStatus }
+            : {}),
+          ...(typeof s?.adminLateNote === "string" && s.adminLateNote
+            ? { adminLateNote: s.adminLateNote }
+            : {}),
+          ...(typeof s?.draftSavedAt === "string" && s.draftSavedAt
+            ? { draftSavedAt: s.draftSavedAt }
+            : {}),
           notes: s?.notes || s?.keterangan || "",
           obstacle: s?.obstacle || "",
           solution: s?.solution || "",
@@ -208,10 +266,14 @@ export function normalizeTriwulanPrograms(raw: unknown): TriwulanProgramItem[] {
     }
     return {
       id: r?.id || `program-${idx + 1}`,
+      strategicGoalId: r?.strategicGoalId || "",
+      strategicGoal: r?.strategicGoal || "",
       program: r?.program || "",
       sasaranList: [
         {
           id: `sasaran-${idx + 1}-1`,
+          strategicGoalId: r?.strategicGoalId || "",
+          strategicGoal: r?.strategicGoal || "",
           target: r?.target || "",
           monthStart: r?.monthStart || "",
           monthEnd: r?.monthEnd || "",
@@ -271,10 +333,13 @@ export function hasTriwulanContent(
   if (unit.trim() || subUnit.trim()) return true
   if (programs.length > 1) return true
   return programs.some((program) => {
-    if (program.program.trim()) return true
+    if ((program.strategicGoal ?? "").trim() || program.program.trim()) {
+      return true
+    }
     if (program.sasaranList.length > 1) return true
     return program.sasaranList.some((s) =>
       [
+        s.strategicGoal ?? "",
         s.target,
         s.monthStart,
         s.monthEnd ?? "",
@@ -300,6 +365,7 @@ export function calculateSasaranKinerjaCompleteness(
   for (const item of criteria) {
     const strategies = getStrategies(item)
     for (const strategy of strategies) {
+      const strategicGoalName = strategy.name.trim() || item.name.trim()
       for (const program of strategy.programs) {
         const sasaranList = getProgramSasaran(program)
         for (const sasaran of sasaranList) {
@@ -309,8 +375,7 @@ export function calculateSasaranKinerjaCompleteness(
             (!sasaran.bulan_selesai ||
               sasaran.bulan_selesai >= sasaran.bulan_mulai)
           if (
-            item.name.trim() &&
-            strategy.name.trim() &&
+            strategicGoalName &&
             program.name.trim() &&
             sasaran.sasaran.trim() &&
             validDates
@@ -329,28 +394,28 @@ export function buildSasaranKinerjaItems(
 ): HistoryItem[] {
   return criteria.flatMap((item) => {
     const strategies = getStrategies(item)
-    return [
-      { label: "Kriteria", value: item.name },
-      ...strategies.flatMap((strategy) => [
-        { label: "Strategi", value: strategy.name },
+    return strategies.flatMap((strategy) => {
+      const strategicGoal = strategy.name.trim() || item.name.trim()
+      return [
+        { label: "Sasaran Strategis", value: strategicGoal },
         ...strategy.programs.flatMap((program) => {
           const sList = getProgramSasaran(program)
           return [
             { label: "Program Kerja", value: program.name },
             ...sList.flatMap((sasaran) => [
-              { label: "Sasaran", value: sasaran.sasaran },
+              { label: "Sasaran Kinerja", value: sasaran.sasaran },
               {
                 label: "Bulan Pelaksanaan",
                 value: sasaran.bulan_selesai
-                  ? `${sasaran.bulan_mulai} – ${sasaran.bulan_selesai}`
+                  ? `${sasaran.bulan_mulai} - ${sasaran.bulan_selesai}`
                   : sasaran.bulan_mulai,
               },
               { label: "Keterangan", value: sasaran.keterangan || "-" },
             ]),
           ]
         }),
-      ]),
-    ]
+      ]
+    })
   })
 }
 
@@ -391,17 +456,25 @@ export function splitStageTargetTime(value: string): {
   return { stage: remaining, stageTargetTime: extractedTime }
 }
 
+export const TRIWULAN_ITEMS_PER_SASARAN = 12
+
 export function buildTriwulanItems(
   programs: TriwulanProgramItem[],
 ): HistoryItem[] {
   return programs.flatMap((prog) =>
     prog.sasaranList.flatMap((sas) => {
+      const strategicGoal =
+        sas.strategicGoal?.trim() ||
+        prog.strategicGoal?.trim() ||
+        sas.annualSource?.strategicGoal?.trim() ||
+        "-"
       const periodeBulan =
         sas.monthEnd && sas.monthEnd.trim()
-          ? `${sas.monthStart} – ${sas.monthEnd}`
+          ? `${sas.monthStart} - ${sas.monthEnd}`
           : sas.monthStart
       const persenStr = sas.percentage.trim() ? `${sas.percentage}%` : "0%"
       return [
+        { label: "Sasaran Strategis", value: strategicGoal },
         { label: "Program Kerja", value: prog.program },
         { label: "Sasaran", value: sas.target },
         { label: "Bulan Pelaksanaan", value: periodeBulan },
@@ -510,4 +583,3 @@ export function extractDashboardAnnualMetrics(
     targets,
   }
 }
-

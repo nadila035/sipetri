@@ -1,3 +1,6 @@
+import type { HistoryRecord, LateStatus } from "../types/index.ts"
+import { formatStageWithTargetTime } from "./drafts.ts"
+
 export const formatBulanPelaksanaan = (
   mulai?: string,
   selesai?: string,
@@ -34,7 +37,7 @@ export const formatBulanPelaksanaan = (
 
   const startObj = parseM(mulai)
   if (!startObj.ok) {
-    if (selesai && selesai !== mulai) return `${mulai} – ${selesai}`
+    if (selesai && selesai !== mulai) return `${mulai} - ${selesai}`
     return mulai
   }
 
@@ -43,19 +46,17 @@ export const formatBulanPelaksanaan = (
   }
 
   const endObj = parseM(selesai)
-  if (!endObj.ok) return `${mulai} – ${selesai}`
+  if (!endObj.ok) return `${mulai} - ${selesai}`
 
   if (startObj.year === endObj.year) {
-    return `${startObj.month} – ${endObj.month} ${startObj.year}`
+    return `${startObj.month} - ${endObj.month} ${startObj.year}`
   }
-  return `${startObj.month} ${startObj.year} – ${endObj.month} ${endObj.year}`
+  return `${startObj.month} ${startObj.year} - ${endObj.month} ${endObj.year}`
 }
-
-import type { HistoryRecord } from "../types/index.ts"
-import { formatStageWithTargetTime } from "./drafts.ts"
 
 export type TriwulanDisplaySasaran = {
   id: string
+  strategicGoal: string
   target: string
   month: string
   stage: string
@@ -66,24 +67,51 @@ export type TriwulanDisplaySasaran = {
   solutionTime: string
   notes: string
   evidence: string
+  lateStatus?: LateStatus
+  adminLateNote?: string
+  isLockedCompleted?: boolean
+  completedInQuarter?: string
+  carryOverFromQuarter?: string
+  priorPercentage?: number
+  targetQuarter?: string
+  stride: 11 | 12
   baseIdx: number
 }
 
 export type TriwulanDisplayProgram = {
   id: string
+  strategicGoal: string
   program: string
   sasaranList: TriwulanDisplaySasaran[]
+}
+
+export function detectTriwulanItemStride(record: HistoryRecord): 11 | 12 {
+  if (record.items?.[0]?.label === "Sasaran Strategis") return 12
+  if (record.items?.length && record.items.length % 12 === 0 && record.items.length % 11 !== 0) {
+    return 12
+  }
+  if (record.items?.length && record.items.length % 11 === 0 && record.items[0]?.label === "Program Kerja") {
+    return 11
+  }
+  return 12
 }
 
 export function getTriwulanData(
   record: HistoryRecord,
 ): TriwulanDisplayProgram[] {
+  const stride = detectTriwulanItemStride(record)
+
   if (record.triwulanPrograms && record.triwulanPrograms.length > 0) {
     let globalSasIdx = 0
     return record.triwulanPrograms.map((prog, pIdx) => {
+      const progGoal =
+        prog.strategicGoal ||
+        prog.sasaranList[0]?.strategicGoal ||
+        prog.sasaranList[0]?.annualSource?.strategicGoal ||
+        "-"
       const sasList: TriwulanDisplaySasaran[] = prog.sasaranList.map(
         (sas, sIdx) => {
-          const baseIdx = globalSasIdx * 11
+          const baseIdx = globalSasIdx * stride
           globalSasIdx++
           const periodeBulan = formatBulanPelaksanaan(
             sas.monthStart,
@@ -92,8 +120,16 @@ export function getTriwulanData(
           const persen = sas.percentage
             ? `${sas.percentage.replace("%", "")}%`
             : "0%"
+          const sasId = sas.id || `sas-${pIdx}-${sIdx}`
+          const resolvedLateStatus =
+            record.lateNotes?.[sasId] ?? sas.lateStatus
           return {
-            id: sas.id || `sas-${pIdx}-${sIdx}`,
+            id: sasId,
+            strategicGoal:
+              sas.strategicGoal ||
+              prog.strategicGoal ||
+              sas.annualSource?.strategicGoal ||
+              "-",
             target: sas.target || "-",
             month: periodeBulan || "-",
             stage:
@@ -105,25 +141,35 @@ export function getTriwulanData(
             solutionTime: sas.solutionTime || "-",
             notes: sas.notes || "-",
             evidence: sas.evidence || "-",
+            lateStatus: resolvedLateStatus,
+            adminLateNote: sas.adminLateNote,
+            isLockedCompleted: sas.isLockedCompleted,
+            completedInQuarter: sas.completedInQuarter,
+            carryOverFromQuarter: sas.carryOverFromQuarter,
+            priorPercentage: sas.priorPercentage,
+            targetQuarter: sas.targetQuarter,
+            stride,
             baseIdx,
           }
         },
       )
       return {
         id: prog.id || `prog-${pIdx + 1}`,
+        strategicGoal: progGoal,
         program: prog.program || "-",
         sasaranList: sasList,
       }
     })
   }
 
-  // Fallback for legacy or mock records with record.items:
   const items = record.items || []
-  const progsMap: { [progName: string]: TriwulanDisplayProgram } = {}
+  const progsMap: { [progKey: string]: TriwulanDisplayProgram } = {}
   const progsList: TriwulanDisplayProgram[] = []
 
-  for (let i = 0; i < items.length; i += 11) {
-    const chunk = items.slice(i, i + 11)
+  for (let i = 0; i < items.length; i += stride) {
+    const chunk = items.slice(i, i + stride)
+    const goalVal =
+      chunk.find((c) => c.label === "Sasaran Strategis")?.value ?? "-"
     const progVal = chunk.find((c) => c.label === "Program Kerja")?.value ?? "-"
     const targetVal = chunk.find((c) => c.label === "Sasaran")?.value ?? "-"
     const monthVal = chunk.find((c) => c.label.includes("Bulan"))?.value ?? "-"
@@ -147,6 +193,7 @@ export function getTriwulanData(
 
     const sasObj: TriwulanDisplaySasaran = {
       id: `sas-${i}`,
+      strategicGoal: goalVal,
       target: targetVal,
       month: monthVal,
       stage: stageVal,
@@ -157,44 +204,50 @@ export function getTriwulanData(
       solutionTime: solTimeVal,
       notes: noteVal,
       evidence: evVal,
+      stride,
       baseIdx: i,
     }
 
-    if (!progsMap[progVal]) {
+    const groupKey = `${goalVal}||${progVal}`
+    if (!progsMap[groupKey]) {
       const newProg: TriwulanDisplayProgram = {
         id: `prog-${progsList.length + 1}`,
+        strategicGoal: goalVal,
         program: progVal,
         sasaranList: [sasObj],
       }
-      progsMap[progVal] = newProg
+      progsMap[groupKey] = newProg
       progsList.push(newProg)
     } else {
-      progsMap[progVal].sasaranList.push(sasObj)
+      progsMap[groupKey].sasaranList.push(sasObj)
     }
   }
 
   return progsList.length > 0
     ? progsList
     : [
-      {
-        id: "prog-1",
-        program: "-",
-        sasaranList: [
-          {
-            id: "sas-1",
-            target: "-",
-            month: "-",
-            stage: "-",
-            realization: "-",
-            percentage: "0%",
-            obstacle: "-",
-            solution: "-",
-            solutionTime: "-",
-            notes: "-",
-            evidence: "-",
-            baseIdx: 0,
-          },
-        ],
-      },
-    ]
+        {
+          id: "prog-1",
+          strategicGoal: "-",
+          program: "-",
+          sasaranList: [
+            {
+              id: "sas-1",
+              strategicGoal: "-",
+              target: "-",
+              month: "-",
+              stage: "-",
+              realization: "-",
+              percentage: "0%",
+              obstacle: "-",
+              solution: "-",
+              solutionTime: "-",
+              notes: "-",
+              evidence: "-",
+              stride,
+              baseIdx: 0,
+            },
+          ],
+        },
+      ]
 }

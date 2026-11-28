@@ -1,4 +1,5 @@
 import type { AppNotification, AuthSession } from "../types"
+import { getSessionLockedOrganization } from "../utils/auth"
 import { AccountMenu } from "./AccountMenu"
 import { AdminNotifications } from "./AdminNotifications"
 import { Icon } from "./Icon"
@@ -29,32 +30,39 @@ export function Header({
 }: HeaderProps) {
   const role = session.role
   const title = role === "staff" && active === "Riwayat" ? "Riwayat Dokumen" : active
+  const lockedOrg = getSessionLockedOrganization(session)
   const unitTag =
     role === "admin"
-      ? "Administrator PRP (Semua Unit)"
-      : "Semua Unit Pelapor"
+      ? `${session.displayName} (Semua Unit)`
+      : `Unit Terkunci: ${lockedOrg.unitLabel}`
   const staffBreadcrumb =
     active === "Dashboard"
-      ? `Ringkasan kinerja ${unitTag}`
+      ? `Ringkasan kinerja · ${unitTag}`
       : active === "Isi Laporan Triwulan"
-        ? `Beranda / Pelaporan · ${unitTag}`
+        ? `Beranda / Pelaporan Triwulan · ${unitTag}`
         : active === "Isi Sasaran Kinerja"
-          ? `Beranda / Perencanaan · ${unitTag}`
-          : active === "Riwayat"
-            ? `Beranda / Arsip · ${unitTag}`
-            : `Beranda / ${title}`
+          ? `Beranda / Perencanaan Tahunan · ${unitTag}`
+          : active === "Monitoring Keterlambatan"
+            ? `Beranda / Riwayat Keterlambatan · ${unitTag}`
+            : active === "Riwayat"
+              ? `Beranda / Arsip Unit · ${unitTag}`
+              : `Beranda / ${title}`
   const adminBreadcrumb =
     active === "Dashboard Monitoring"
       ? "Ringkasan pemantauan institusi"
-      : active === "Verifikasi Laporan Triwulan"
-        ? "Beranda / Laporan Triwulan"
-        : active === "Verifikasi Sasaran Kinerja"
-          ? "Beranda / Sasaran Kinerja"
-          : active === "Arsip dan Rekapitulasi"
-            ? "Beranda / Arsip"
-            : active === "Periode dan Tenggat Waktu"
-              ? "Beranda / Pengaturan Periode"
-              : `Beranda / ${title}`
+      : active === "Master Sasaran Strategis"
+        ? "Beranda / Master Data Renbang & PRP"
+        : active === "Verifikasi Laporan Triwulan"
+          ? "Beranda / Laporan Triwulan"
+          : active === "Verifikasi Sasaran Kinerja"
+            ? "Beranda / Sasaran Kinerja"
+            : active === "Monitoring Keterlambatan"
+              ? "Beranda / Rekap Triwulan Tertunggak"
+              : active === "Arsip dan Rekapitulasi"
+                ? "Beranda / Arsip"
+                : active === "Periode dan Tenggat Waktu"
+                  ? "Beranda / Pengaturan Periode"
+                  : `Beranda / ${title}`
   return (
     <header className="topbar">
       <div className="topbar-heading">

@@ -1,17 +1,30 @@
 import type { RefObject } from "react"
 import { Icon } from "./Icon"
 import { AccountMenu } from "./AccountMenu"
-import type { AuthSession, NavItem } from "../types"
+import type { AuthSession, IconName, NavItem } from "../types"
 import { adminMenus } from "../pages/Admin"
 import { useReporting } from "../ReportingContext"
-import { filterRecordsForSession } from "../utils/auth"
+import { filterRecordsForSession, getSessionLockedOrganization } from "../utils/auth"
+import { getUnitAnnualPrerequisiteState } from "../utils/annualSources"
+import { collectLateTriwulanItems } from "../utils/lateMonitoring"
 
 export const navItems: NavItem[] = [
   { label: "Dashboard", icon: "grid" },
-  { label: "Isi Laporan Triwulan", icon: "report" },
   { label: "Isi Sasaran Kinerja", icon: "target" },
+  { label: "Isi Laporan Triwulan", icon: "report" },
+  { label: "Monitoring Keterlambatan", icon: "alert" },
   { label: "Riwayat", icon: "history" },
 ]
+
+const ADMIN_MENU_ICONS: Record<string, IconName> = {
+  "Dashboard Monitoring": "chart",
+  "Master Sasaran Strategis": "layers",
+  "Verifikasi Sasaran Kinerja": "target",
+  "Verifikasi Laporan Triwulan": "report",
+  "Monitoring Keterlambatan": "alert",
+  "Arsip dan Rekapitulasi": "history",
+  "Periode dan Tenggat Waktu": "calendar",
+}
 
 type SidebarProps = {
   active: string
@@ -38,23 +51,52 @@ export function Sidebar({
   onOpenHelp,
   onLogout,
 }: SidebarProps) {
-  const { data } = useReporting()
+  const { data, nowMs } = useReporting()
+  const lockedOrg = getSessionLockedOrganization(session)
   const unitRecords = filterRecordsForSession(data.records, session)
+
   const hasTriwulanDraft = unitRecords.some(
     (record) => record.type === "Laporan Triwulan" && record.status === "Draf",
   )
   const hasSasaranDraft = unitRecords.some(
     (record) => record.type === "Sasaran Kinerja" && record.status === "Draf",
   )
+
+  const prereq =
+    session.role === "staff"
+      ? getUnitAnnualPrerequisiteState(
+          data.records,
+          data.year,
+          lockedOrg.subUnit,
+        )
+      : { status: "approved" as const, canAccessTriwulan: true }
+
+  const hasAnyApprovedAnnual =
+    session.role === "staff"
+      ? unitRecords.some(
+          (record) =>
+            record.type === "Sasaran Kinerja" && record.status === "Disetujui",
+        )
+      : true
+
+  const isTriwulanNavLocked =
+    session.role === "staff" && !prereq.canAccessTriwulan && !hasAnyApprovedAnnual
+
+  const overdueCount = collectLateTriwulanItems({
+    records: data.records,
+    periods: data.periods,
+    year: data.year,
+    activeQuarter: data.quarter,
+    sessionSubUnit: session.role === "staff" ? lockedOrg.subUnit : undefined,
+    nowMs,
+  }).filter((item) => item.lateStatus === "Terlambat").length
+
   const menus: NavItem[] =
     session.role === "admin"
-      ? adminMenus.map((label, i) => ({
-        label,
-        icon:
-          (["chart", "report", "target", "history", "calendar"] as const)[
-          i
-          ] ?? "grid",
-      }))
+      ? adminMenus.map((label) => ({
+          label,
+          icon: ADMIN_MENU_ICONS[label] ?? "grid",
+        }))
       : navItems
 
   return (
@@ -115,23 +157,55 @@ export function Sidebar({
       <div className="sidebar-body">
         <nav className="side-nav" aria-label="Menu utama">
           {menus.map((item) => {
+            const isLockedTriwulan =
+              item.label === "Isi Laporan Triwulan" && isTriwulanNavLocked
             const showIndicatorDot =
               session.role === "staff" &&
+              !isLockedTriwulan &&
               ((item.label === "Isi Laporan Triwulan" && hasTriwulanDraft) ||
                 (item.label === "Isi Sasaran Kinerja" && hasSasaranDraft))
+            const showLateBadge =
+              item.label === "Monitoring Keterlambatan" && overdueCount > 0
+
+            const lockTooltip = `Terkunci: Selesaikan dan dapatkan persetujuan (ACC) Sasaran Kinerja Tahun ${data.year} terlebih dahulu.`
+
             return (
               <button
                 key={item.label}
-                aria-label={item.label}
-                aria-current={active === item.label ? "page" : undefined}
-                title={item.label}
-                className={
-                  active === item.label ? "nav-item active" : "nav-item"
+                type="button"
+                disabled={isLockedTriwulan}
+                aria-label={
+                  isLockedTriwulan ? `${item.label} (${lockTooltip})` : item.label
                 }
-                onClick={() => onSelectMenu(item.label)}
+                aria-current={active === item.label ? "page" : undefined}
+                title={isLockedTriwulan ? lockTooltip : item.label}
+                className={[
+                  "nav-item",
+                  active === item.label && "active",
+                  isLockedTriwulan && "is-locked-nav",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => {
+                  if (isLockedTriwulan) return
+                  onSelectMenu(item.label)
+                }}
               >
-                <Icon name={item.icon} />
+                <Icon name={isLockedTriwulan ? "lock" : item.icon} />
                 <span className="nav-item-label">{item.label}</span>
+                {isLockedTriwulan && (
+                  <span className="nav-lock-pill" aria-hidden="true">
+                    Terkunci
+                  </span>
+                )}
+                {showLateBadge && (
+                  <span
+                    className="nav-count-badge"
+                    aria-label={`${overdueCount} item tertunggak`}
+                  >
+                    {overdueCount}
+                  </span>
+                )}
                 {showIndicatorDot && (
                   <span className="nav-dot" aria-hidden="true" />
                 )}

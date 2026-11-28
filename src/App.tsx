@@ -8,6 +8,7 @@ import { AccountInfoModal, HelpGuideModal } from "./components/AccountModals"
 import { Dashboard } from "./pages/Dashboard"
 import { InputLaporanTriwulan } from "./pages/InputLaporanTriwulan"
 import { InputSasaranKinerja } from "./pages/InputSasaranKinerja"
+import { LateMonitoringPage } from "./components/LateMonitoringPage"
 import { RiwayatLaporan, initialHistory } from "./pages/RiwayatLaporan"
 import { LoginPage } from "./pages/LoginPage"
 import { PortalPage } from "./pages/PortalPage"
@@ -497,6 +498,10 @@ function AppWorkspace({
               notify={notify}
               resumeDraftId={resumeDraftId}
               onViewHistory={() => selectMenu("Riwayat")}
+              onOpenSasaranKinerja={() => selectMenu("Isi Sasaran Kinerja")}
+              onOpenLateMonitoring={() =>
+                selectMenu("Monitoring Keterlambatan")
+              }
             />
           ) : active === "Isi Sasaran Kinerja" ? (
             <InputSasaranKinerja
@@ -504,6 +509,13 @@ function AppWorkspace({
               notify={notify}
               resumeDraftId={resumeDraftId}
               onViewHistory={() => selectMenu("Riwayat")}
+              onOpenTriwulan={() => selectMenu("Isi Laporan Triwulan")}
+            />
+          ) : active === "Monitoring Keterlambatan" ? (
+            <LateMonitoringPage
+              role="staff"
+              notify={notify}
+              onOpenTriwulan={() => selectMenu("Isi Laporan Triwulan")}
             />
           ) : active === "Riwayat" ? (
             <RiwayatLaporan

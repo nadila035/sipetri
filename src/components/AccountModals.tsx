@@ -27,8 +27,8 @@ export function AccountInfoModal({
 
   const unitScopeText =
     session.role === "admin"
-      ? "Seluruh bagian dan unit kerja (Administrator PRP)"
-      : "Akses seluruh unit pelapor (unit dipilih langsung pada formulir)"
+      ? "Seluruh bagian dan unit kerja (Administrator PRP / Renbang)"
+      : `Terkunci otomatis pada unit ${session.subUnit || session.parentUnit} sesuai sesi login aktif`
 
   return (
     <div
@@ -52,19 +52,21 @@ export function AccountInfoModal({
           <div>
             <dt>Peran Akun</dt>
             <dd>
-              {session.role === "admin" ? "Admin PRP" : "Staf Bagian / Unit"}
+              {session.role === "admin"
+                ? session.displayName
+                : "Staf Bagian / Unit Pelapor"}
             </dd>
           </div>
           <div>
             <dt>Unit Utama</dt>
-            <dd>{session.parentUnit || "Dipilih di formulir"}</dd>
+            <dd>{session.parentUnit || "-"}</dd>
           </div>
           <div>
             <dt>Sub Unit / Bagian</dt>
             <dd>
               {session.role === "admin"
                 ? "Semua Unit (Admin)"
-                : "Semua Unit (Bebas Pilih)"}
+                : `${session.subUnit || session.parentUnit} (Terkunci Sesi)`}
             </dd>
           </div>
           <div>

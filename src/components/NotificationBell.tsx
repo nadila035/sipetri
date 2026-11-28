@@ -104,6 +104,7 @@ export function NotificationBell({
     periods: data.periods,
     year: data.year,
     quarter: data.quarter,
+    sessionSubUnit: session?.subUnit,
     legacyReadKeys: readIds,
   })
 

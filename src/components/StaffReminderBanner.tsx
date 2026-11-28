@@ -1,5 +1,7 @@
+import { useAuth } from "../AuthContext"
 import { useReporting } from "../ReportingContext"
 import type { AppNotification } from "../types"
+import { canNotificationReachSession } from "../utils/auth"
 import {
   collectActiveStaffReminders,
   formatNotificationTimeLabel,
@@ -14,9 +16,10 @@ export function StaffReminderBanner({
   onAcknowledge: (id: string) => void
 }) {
   const { data } = useReporting()
+  const { session } = useAuth()
   const activeReminders = collectActiveStaffReminders({
     storedNotifications: data.notifications,
-  })
+  }).filter((item) => canNotificationReachSession(item, session))
 
   if (activeReminders.length === 0) return null
 

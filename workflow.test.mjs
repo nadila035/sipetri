@@ -33,9 +33,27 @@ import {
 
 import {
   annualSources,
+  getUnitAnnualPrerequisiteState,
   importAnnualSources,
   sourceKey,
+  syncTriwulanFromApprovedAnnual,
 } from "./src/utils/annualSources.ts"
+
+import {
+  DEFAULT_STRATEGIC_GOALS,
+  addMasterStrategicGoal,
+  propagateStrategicGoalRename,
+  removeMasterStrategicGoal,
+  updateMasterStrategicGoal,
+} from "./src/utils/strategicGoals.ts"
+
+import {
+  collectLateTriwulanItems,
+  filterLateMonitoringEntries,
+} from "./src/utils/lateMonitoring.ts"
+
+import fs from "node:fs"
+import path from "node:path"
 
 import {
   SOP_ADMIN_DOC,
@@ -349,7 +367,8 @@ test("formatStageWithTargetTime and splitStageTargetTime roundtrip cleanly", () 
 test("reviseRecord updates Tahap Pelaksanaan without duplicating target time label", () => {
   const sasaran = {
     ...createEmptyTriwulanSasaran(),
-    sasaran: "Sasaran 1",
+    strategicGoal: "SS-01",
+    target: "Sasaran 1",
     monthStart: "2026-04",
     monthEnd: "2026-06",
     stage: "Tahap awal",
@@ -357,16 +376,23 @@ test("reviseRecord updates Tahap Pelaksanaan without duplicating target time lab
     realization: "Berjalan",
     percentage: "100",
   }
-  const programs = [{ id: "p-1", program: "Program 1", sasaranList: [sasaran] }]
+  const programs = [
+    {
+      id: "p-1",
+      strategicGoal: "SS-01",
+      program: "Program 1",
+      sasaranList: [sasaran],
+    },
+  ]
   const items = buildTriwulanItems(programs).map((item, idx) =>
-    idx === 3 ? { ...item, needsRevision: true, note: "Lengkapi uraian" } : item,
+    idx === 4 ? { ...item, needsRevision: true, note: "Lengkapi uraian" } : item,
   )
   const record = {
     id: "LTR-2026-II-1",
     type: "Laporan Triwulan",
     title: "Laporan Realisasi Triwulan II",
     period: "Triwulan II · 2026",
-    unit: "Bagian Keuangan",
+    unit: "BKU",
     sentAt: "10 Juli 2026",
     status: "Revisi",
     progress: 100,
@@ -379,10 +405,10 @@ test("reviseRecord updates Tahap Pelaksanaan without duplicating target time lab
     "Tahap awal sudah diperbarui",
     "Akhir Mei 2026",
   )
-  const updated = reviseRecord(record, { 3: revisedValue })
+  const updated = reviseRecord(record, { 4: revisedValue })
 
   assert.equal(updated.status, "Menunggu")
-  assert.equal(updated.items[3].value, revisedValue)
+  assert.equal(updated.items[4].value, revisedValue)
   assert.equal(
     updated.triwulanPrograms[0].sasaranList[0].stage,
     "Tahap awal sudah diperbarui",
@@ -441,50 +467,80 @@ test("getDeadlineCardModel formats active countdown, open-ended, upcoming, expir
 })
 
 test("formatDeadlineSummary keeps concise deadline-only labels across states", () => {
+  const midNov2026 = Date.parse("2026-11-20T05:00:00.000Z")
+  const lateNov2026 = Date.parse("2026-11-28T05:00:00.000Z")
   assert.equal(
-    formatDeadlineSummary({
-      startDate: "2026-11-01",
-      deadline: "2026-11-27",
-      open: true,
-    }),
+    formatDeadlineSummary(
+      {
+        startDate: "2026-11-01",
+        deadline: "2026-11-27",
+        open: true,
+      },
+      midNov2026,
+    ),
     "27 November 2026",
   )
   assert.equal(
-    formatDeadlineSummary({
-      startDate: "2026-01-01",
-      deadline: "2026-01-31",
-      open: false,
-    }),
+    formatDeadlineSummary(
+      {
+        startDate: "2026-11-01",
+        deadline: "2026-11-27",
+        open: true,
+      },
+      lateNov2026,
+    ),
+    "27 November 2026 (Terkunci)",
+  )
+  assert.equal(
+    formatDeadlineSummary(
+      {
+        startDate: "2026-01-01",
+        deadline: "2026-01-31",
+        open: false,
+      },
+      midNov2026,
+    ),
     "31 Januari 2026 (Terkunci)",
   )
   assert.equal(
-    formatDeadlineSummary({ startDate: "", deadline: "", open: true }),
+    formatDeadlineSummary(
+      { startDate: "", deadline: "", open: true },
+      midNov2026,
+    ),
     "Tanpa batas tanggal",
   )
   assert.equal(
-    formatDeadlineSummary({ startDate: "", deadline: "", open: false }),
+    formatDeadlineSummary(
+      { startDate: "", deadline: "", open: false },
+      midNov2026,
+    ),
     "Terkunci",
   )
 })
 
-test("getReviewPrograms groups multi-sasaran Laporan Triwulan programs and keeps Program Kerja at program level", () => {
+test("getReviewPrograms groups multi-sasaran 13-column Laporan Triwulan programs cleanly", () => {
   const sas1 = createEmptyTriwulanSasaran("sas-1")
+  sas1.strategicGoal = "SS-04 Transformasi Digital"
   sas1.target = "Sasaran Pertama"
   sas1.percentage = "80"
   const sas2 = createEmptyTriwulanSasaran("sas-2")
+  sas2.strategicGoal = "SS-04 Transformasi Digital"
   sas2.target = "Sasaran Kedua"
   sas2.percentage = "95"
   const sas3 = createEmptyTriwulanSasaran("sas-3")
+  sas3.strategicGoal = "SS-03 Pengembangan SDM"
   sas3.target = "Sasaran Ketiga"
 
   const triwulanPrograms = [
     {
       id: "prog-1",
+      strategicGoal: "SS-04 Transformasi Digital",
       program: "Digitalisasi Layanan",
       sasaranList: [sas1, sas2],
     },
     {
       id: "prog-2",
+      strategicGoal: "SS-03 Pengembangan SDM",
       program: "Peningkatan SDM",
       sasaranList: [sas3],
     },
@@ -506,20 +562,20 @@ test("getReviewPrograms groups multi-sasaran Laporan Triwulan programs and keeps
   const reviewed = getReviewPrograms(record)
   assert.equal(reviewed.length, 2)
   assert.equal(reviewed[0].name, "Digitalisasi Layanan")
-  assert.deepEqual(reviewed[0].programItemIndexes, [0])
+  assert.deepEqual(reviewed[0].programItemIndexes, [0, 1])
   assert.equal(reviewed[0].sasaranList.length, 2)
   assert.equal(reviewed[0].sasaranList[0].label, "Sasaran Pertama")
   assert.equal(reviewed[0].sasaranList[0].itemIndexes.length, 10)
-  assert.equal(reviewed[0].sasaranList[0].itemIndexes[0], 1)
+  assert.equal(reviewed[0].sasaranList[0].itemIndexes[0], 2)
   assert.equal(reviewed[0].sasaranList[1].label, "Sasaran Kedua")
   assert.equal(reviewed[0].sasaranList[1].itemIndexes.length, 10)
-  assert.equal(reviewed[0].sasaranList[1].itemIndexes[0], 12)
+  assert.equal(reviewed[0].sasaranList[1].itemIndexes[0], 14)
   assert.equal(
-    formatReviewItemLocation(record, reviewed, 16),
+    formatReviewItemLocation(record, reviewed, 18),
     "Program 1 · Sasaran 2 · Realisasi (%)",
   )
   assert.equal(
-    formatReviewItemLocation(record, reviewed, 0),
+    formatReviewItemLocation(record, reviewed, 1),
     "Program 1 · Program Kerja",
   )
 
@@ -533,11 +589,11 @@ test("getReviewPrograms groups multi-sasaran Laporan Triwulan programs and keeps
   assert.equal(fallbackReviewed[1].sasaranList.length, 1)
 })
 
-test("getReviewPrograms groups multi-sasaran Sasaran Kinerja programs cleanly", () => {
+test("getReviewPrograms groups multi-sasaran 6-column Sasaran Kinerja programs cleanly", () => {
   const criteriaData = [
     {
       id: "crit-1",
-      name: "Tata Kelola",
+      name: "Digitalisasi Tata Kelola",
       strategy: {
         id: "strat-1",
         name: "Digitalisasi Tata Kelola",
@@ -590,23 +646,30 @@ test("getReviewPrograms groups multi-sasaran Sasaran Kinerja programs cleanly", 
 
   const reviewed = getReviewPrograms(record)
   assert.equal(reviewed.length, 1)
-  assert.deepEqual(reviewed[0].programItemIndexes, [0, 1, 2])
+  assert.deepEqual(reviewed[0].programItemIndexes, [0, 1])
   assert.equal(reviewed[0].sasaranList.length, 2)
-  assert.deepEqual(reviewed[0].sasaranList[0].itemIndexes, [3, 4, 5])
-  assert.deepEqual(reviewed[0].sasaranList[1].itemIndexes, [6, 7, 8])
+  assert.deepEqual(reviewed[0].sasaranList[0].itemIndexes, [2, 3, 4])
+  assert.deepEqual(reviewed[0].sasaranList[1].itemIndexes, [5, 6, 7])
   assert.equal(
-    formatReviewItemLocation(record, reviewed, 6),
-    "Program 1 · Sasaran 2 · Sasaran",
+    formatReviewItemLocation(record, reviewed, 5),
+    "Program 1 · Sasaran 2 · Sasaran Kinerja",
   )
 })
 
 test("reviseRecord preserves edited Program Kerja name on multi-sasaran Laporan Triwulan", () => {
   const sas1 = createEmptyTriwulanSasaran("sas-1")
+  sas1.strategicGoal = "SS-01"
   sas1.target = "Target 1"
   const sas2 = createEmptyTriwulanSasaran("sas-2")
+  sas2.strategicGoal = "SS-01"
   sas2.target = "Target 2"
   const programs = [
-    { id: "prog-1", program: "Program Lama", sasaranList: [sas1, sas2] },
+    {
+      id: "prog-1",
+      strategicGoal: "SS-01",
+      program: "Program Lama",
+      sasaranList: [sas1, sas2],
+    },
   ]
   const record = {
     id: "LTR-REV-MULTI",
@@ -622,15 +685,15 @@ test("reviseRecord preserves edited Program Kerja name on multi-sasaran Laporan 
     reviews: [],
   }
 
-  const updated = reviseRecord(record, { 0: "Program Baru" })
+  const updated = reviseRecord(record, { 1: "Program Baru" })
   assert.equal(updated.triwulanPrograms[0].program, "Program Baru")
 })
 
-test("getSasaranKinerjaReviewCriteria maps structured multi-sasaran and legacy fallback rows to exact item indexes", () => {
+test("getSasaranKinerjaReviewCriteria maps structured 6-column multi-sasaran and fallback rows to exact item indexes", () => {
   const criteriaData = [
     {
       id: "crit-1",
-      name: "Kriteria A",
+      name: "Strategi A",
       strategy: { id: "s1", name: "Strategi A", programs: [] },
       strategies: [
         {
@@ -679,20 +742,20 @@ test("getSasaranKinerjaReviewCriteria maps structured multi-sasaran and legacy f
 
   const structured = getSasaranKinerjaReviewCriteria(record)
   assert.equal(structured.length, 1)
-  assert.equal(structured[0].critItemIdx, 0)
-  assert.equal(structured[0].stratSlots[0].stratItemIdx, 1)
-  assert.equal(structured[0].stratSlots[0].programSlots[0].progItemIdx, 2)
+  assert.equal(structured[0].critItemIdx, -1)
+  assert.equal(structured[0].stratSlots[0].stratItemIdx, 0)
+  assert.equal(structured[0].stratSlots[0].programSlots[0].progItemIdx, 1)
   assert.equal(
     structured[0].stratSlots[0].programSlots[0].sasaranSlots.length,
     2,
   )
   assert.equal(
     structured[0].stratSlots[0].programSlots[0].sasaranSlots[0].sasaranItemIdx,
-    3,
+    2,
   )
   assert.equal(
     structured[0].stratSlots[0].programSlots[0].sasaranSlots[1].sasaranItemIdx,
-    6,
+    5,
   )
 
   const legacy = getSasaranKinerjaReviewCriteria({
@@ -703,7 +766,7 @@ test("getSasaranKinerjaReviewCriteria maps structured multi-sasaran and legacy f
   assert.equal(legacy[0].stratSlots[0].programSlots[0].sasaranSlots.length, 2)
   assert.equal(
     legacy[0].stratSlots[0].programSlots[0].sasaranSlots[1].keteranganItemIdx,
-    8,
+    7,
   )
 })
 
@@ -846,4 +909,342 @@ test("Master Recap .xlsx and Unit Package .zip builders produce valid PKZIP cont
   assert.ok(zipText.includes("00_Indeks_Arsip_SIPETRI.csv"))
   assert.ok(zipText.includes("FKET/SK-2026-FKET_Sasaran_Kinerja.csv"))
   assert.ok(zipText.includes("PRP/BPK/LTR-2026-I-BPK_Laporan_Triwulan.csv"))
+})
+
+
+test("Master Sasaran Strategis CRUD and rename propagation work end-to-end", () => {
+  const initial = structuredClone(DEFAULT_STRATEGIC_GOALS)
+  assert.equal(initial.length, 6)
+
+  const added = addMasterStrategicGoal(initial, {
+    name: "Kemandirian Laboratorium Riset Energi Baru",
+    description: "Penguatan sertifikasi ISO laboratorium",
+  })
+  assert.equal(added.ok, true)
+  if (!added.ok) return
+  assert.equal(added.created.code, "SS-07")
+  assert.equal(added.list.length, 7)
+
+  const duplicate = addMasterStrategicGoal(added.list, {
+    name: "kemandirian laboratorium riset energi baru",
+  })
+  assert.equal(duplicate.ok, false)
+
+  const edited = updateMasterStrategicGoal(added.list, added.created.id, {
+    name: "Keunggulan Laboratorium Riset Transisi Energi",
+  })
+  assert.equal(edited.ok, true)
+  if (!edited.ok) return
+
+  const draftRecords = [
+    {
+      id: "DRAF-SK-2026-fket",
+      type: "Sasaran Kinerja",
+      period: "Tahun 2026",
+      unit: "FKET",
+      status: "Draf",
+      sentAt: "Belum dikirim",
+      progress: 100,
+      items: [{ label: "Sasaran Strategis", value: added.created.name }],
+      criteriaData: [
+        {
+          id: "c1",
+          name: added.created.name,
+          strategy: {
+            id: "s1",
+            strategicGoalId: added.created.id,
+            name: added.created.name,
+            programs: [],
+          },
+          strategies: [
+            {
+              id: "s1",
+              strategicGoalId: added.created.id,
+              name: added.created.name,
+              programs: [],
+            },
+          ],
+        },
+      ],
+    },
+  ]
+
+  const propagated = propagateStrategicGoalRename(
+    draftRecords,
+    edited.updated.id,
+    edited.previous.name,
+    edited.updated.name,
+  )
+  assert.equal(
+    propagated[0].criteriaData[0].strategies[0].name,
+    "Keunggulan Laboratorium Riset Transisi Energi",
+  )
+  assert.equal(
+    propagated[0].items[0].value,
+    "Keunggulan Laboratorium Riset Transisi Energi",
+  )
+
+  const removed = removeMasterStrategicGoal(edited.list, edited.updated.id)
+  assert.equal(removed.ok, true)
+  if (removed.ok) {
+    assert.equal(removed.list.length, 6)
+  }
+})
+
+test("Prerequisite workflow, auto-populate after ACC, carry-over, 100% lock, and late monitoring work accurately", () => {
+  const skDraft = {
+    id: "SK-2026-FKET",
+    type: "Sasaran Kinerja",
+    title: "Sasaran Kinerja Tahun 2026",
+    period: "Tahun 2026",
+    unit: "FKET",
+    parentUnit: "FKET",
+    subUnit: "FKET",
+    sentAt: "10/01/2026, 09.00.00",
+    status: "Menunggu",
+    progress: 100,
+    items: [],
+    criteriaData: [
+      {
+        id: "crit-1",
+        name: "Peningkatan Mutu Pendidikan",
+        strategy: { id: "st-1", name: "Peningkatan Mutu Pendidikan", programs: [] },
+        strategies: [
+          {
+            id: "st-1",
+            strategicGoalId: "ss-itpln-01",
+            name: "Peningkatan Mutu Pendidikan",
+            programs: [
+              {
+                id: "prog-tw1-done",
+                name: "Audit Kurikulum OBE",
+                targets: [],
+                sasaranList: [
+                  {
+                    id: "target-a",
+                    sasaran: "100% RPS berbasis OBE",
+                    bulan_mulai: "2026-01",
+                    bulan_selesai: "2026-03",
+                    keterangan: "Selesai TW I",
+                  },
+                ],
+              },
+              {
+                id: "prog-tw1-carry",
+                name: "Sertifikasi Kompetensi Dosen",
+                targets: [],
+                sasaranList: [
+                  {
+                    id: "target-b",
+                    sasaran: "25 dosen tersertifikasi industri",
+                    bulan_mulai: "2026-01",
+                    bulan_selesai: "2026-03",
+                    keterangan: "Target TW I",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+
+  // Before Admin ACC: Triwulan is locked
+  const waitingPrereq = getUnitAnnualPrerequisiteState(
+    [skDraft],
+    "2026",
+    "FKET",
+  )
+  assert.equal(waitingPrereq.status, "waiting")
+  assert.equal(waitingPrereq.canAccessTriwulan, false)
+
+  // Admin approves (ACC) Sasaran Kinerja
+  const skApproved = { ...skDraft, status: "Disetujui" }
+  const approvedPrereq = getUnitAnnualPrerequisiteState(
+    [skApproved],
+    "2026",
+    "FKET",
+  )
+  assert.equal(approvedPrereq.status, "approved")
+  assert.equal(approvedPrereq.canAccessTriwulan, true)
+
+  // Auto-populate TW I
+  const tw1Auto = syncTriwulanFromApprovedAnnual({
+    existingPrograms: [],
+    approvedRecord: skApproved,
+    allRecords: [skApproved],
+    year: "2026",
+    quarter: "I",
+    unitCode: "FKET",
+  })
+  assert.equal(tw1Auto.length, 2)
+  assert.equal(tw1Auto[0].strategicGoal, "Peningkatan Mutu Pendidikan")
+  assert.equal(tw1Auto[0].sasaranList[0].isLockedCompleted, false)
+
+  // Unit submits TW I: target-a = 100%, target-b = 60% (<100%), and Admin approves TW I
+  const tw1SubmittedPrograms = structuredClone(tw1Auto)
+  tw1SubmittedPrograms[0].sasaranList[0].stage = "Evaluasi selesai"
+  tw1SubmittedPrograms[0].sasaranList[0].realization = "Seluruh RPS disahkan"
+  tw1SubmittedPrograms[0].sasaranList[0].percentage = "100"
+
+  tw1SubmittedPrograms[1].sasaranList[0].stage = "Batch 1 berjalan"
+  tw1SubmittedPrograms[1].sasaranList[0].realization = "15 dari 25 dosen lulus"
+  tw1SubmittedPrograms[1].sasaranList[0].percentage = "60"
+  tw1SubmittedPrograms[1].sasaranList[0].obstacle = "Jadwal asesor mundur"
+  tw1SubmittedPrograms[1].sasaranList[0].solution = "Penjadwalan batch 2"
+  tw1SubmittedPrograms[1].sasaranList[0].solutionTime = "Mei 2026"
+
+  const tw1ApprovedRecord = {
+    id: "LTR-2026-I-FKET",
+    type: "Laporan Triwulan",
+    title: "Laporan Realisasi Triwulan I",
+    period: "Triwulan I · 2026",
+    unit: "FKET",
+    parentUnit: "FKET",
+    subUnit: "FKET",
+    sentAt: "05/04/2026, 10.00.00",
+    status: "Disetujui",
+    progress: 100,
+    items: buildTriwulanItems(tw1SubmittedPrograms),
+    triwulanPrograms: tw1SubmittedPrograms,
+  }
+
+  // Open TW II:
+  // - target-a (validated 100% in TW I) MUST be locked read-only (isLockedCompleted: true)
+  // - target-b (60% in TW I, targetQuarter I) MUST carry-over starting at 60% with lateStatus = "Terlambat"
+  const tw2Synced = syncTriwulanFromApprovedAnnual({
+    existingPrograms: [],
+    approvedRecord: skApproved,
+    allRecords: [skApproved, tw1ApprovedRecord],
+    year: "2026",
+    quarter: "II",
+    unitCode: "FKET",
+  })
+
+  const tw2ItemA = tw2Synced[0].sasaranList[0]
+  const tw2ItemB = tw2Synced[1].sasaranList[0]
+
+  assert.equal(tw2ItemA.isLockedCompleted, true)
+  assert.equal(tw2ItemA.completedInQuarter, "I")
+  assert.equal(tw2ItemA.percentage, "100")
+
+  assert.equal(tw2ItemB.isLockedCompleted, false)
+  assert.equal(tw2ItemB.carryOverFromQuarter, "I")
+  assert.equal(tw2ItemB.priorPercentage, 60)
+  assert.equal(tw2ItemB.percentage, "60")
+  assert.equal(tw2ItemB.lateStatus, "Terlambat")
+
+  // Late Monitoring detects target-b as overdue in TW I
+  const lateDuringTw2 = collectLateTriwulanItems({
+    records: [skApproved, tw1ApprovedRecord],
+    periods: {},
+    year: "2026",
+    activeQuarter: "II",
+  })
+  assert.equal(lateDuringTw2.length, 1)
+  assert.equal(lateDuringTw2[0].subUnit, "FKET")
+  assert.equal(lateDuringTw2[0].targetQuarter, "I")
+  assert.equal(lateDuringTw2[0].percentage, 60)
+  assert.equal(lateDuringTw2[0].remainingPercentage, 40)
+  assert.equal(lateDuringTw2[0].lateStatus, "Terlambat")
+  assert.equal(
+    filterLateMonitoringEntries(lateDuringTw2, { overdueQuarter: "I" }).length,
+    1,
+  )
+  assert.equal(
+    filterLateMonitoringEntries(lateDuringTw2, { overdueQuarter: "II" }).length,
+    0,
+  )
+
+  // Now unit finishes target-b to 100% in TW II -> status becomes "Pencapaian Terlambat"
+  tw2ItemB.percentage = "100"
+  tw2ItemB.draftSavedAt = "2026-05-10T09:00:00.000Z"
+  const tw2ResyncedAfter100 = syncTriwulanFromApprovedAnnual({
+    existingPrograms: tw2Synced,
+    approvedRecord: skApproved,
+    allRecords: [skApproved, tw1ApprovedRecord],
+    year: "2026",
+    quarter: "II",
+    unitCode: "FKET",
+  })
+  assert.equal(
+    tw2ResyncedAfter100[1].sasaranList[0].lateStatus,
+    "Pencapaian Terlambat",
+  )
+
+  // Verify Late Monitoring updates to Pencapaian Terlambat and NEVER flags target-a (completed on-time in TW I) even if an untouched TW III draft exists
+  const tw2DraftRecord = {
+    id: "DRAF-LTR-2026-II-fket",
+    type: "Laporan Triwulan",
+    title: "Laporan Realisasi Triwulan II",
+    period: "Triwulan II · 2026",
+    unit: "FKET",
+    parentUnit: "FKET",
+    subUnit: "FKET",
+    sentAt: "Belum dikirim",
+    updatedAt: "2026-05-10T09:00:00.000Z",
+    status: "Draf",
+    progress: 100,
+    items: buildTriwulanItems(tw2ResyncedAfter100),
+    triwulanPrograms: tw2ResyncedAfter100,
+  }
+  const untouchedTw3AutoDraft = {
+    id: "DRAF-LTR-2026-III-fket-auto",
+    type: "Laporan Triwulan",
+    title: "Laporan Realisasi Triwulan III",
+    period: "Triwulan III · 2026",
+    unit: "FKET",
+    parentUnit: "FKET",
+    subUnit: "FKET",
+    sentAt: "Belum dikirim",
+    status: "Draf",
+    progress: 0,
+    items: [],
+    triwulanPrograms: tw1Auto.map((p) => ({
+      ...p,
+      sasaranList: p.sasaranList.map((s) => ({
+        ...s,
+        lateStatus: "Terlambat",
+      })),
+    })),
+  }
+
+  const lateAfterTw2Draft100 = collectLateTriwulanItems({
+    records: [
+      skApproved,
+      tw1ApprovedRecord,
+      tw2DraftRecord,
+      untouchedTw3AutoDraft,
+    ],
+    periods: {},
+    year: "2026",
+    activeQuarter: "III",
+  })
+  assert.equal(lateAfterTw2Draft100.length, 1)
+  assert.equal(lateAfterTw2Draft100[0].program, "Sertifikasi Kompetensi Dosen")
+  assert.equal(lateAfterTw2Draft100[0].percentage, 100)
+  assert.equal(lateAfterTw2Draft100[0].lateStatus, "Pencapaian Terlambat")
+})
+
+test("Zero em-dashes (U+2014) exist anywhere across src/ TypeScript and TSX files", () => {
+  const walk = (dir) => {
+    const out = []
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) out.push(...walk(full))
+      else if (/\.(ts|tsx|css)$/.test(entry.name)) out.push(full)
+    }
+    return out
+  }
+  const files = walk(path.resolve("src"))
+  assert.ok(files.length > 20)
+  for (const file of files) {
+    const content = fs.readFileSync(file, "utf8")
+    assert.equal(
+      content.includes("\u2014"),
+      false,
+      `Found forbidden em-dash in ${file}`,
+    )
+  }
 })

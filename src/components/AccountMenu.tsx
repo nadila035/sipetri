@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react"
 import type { KeyboardEvent as ReactKeyboardEvent } from "react"
 import type { AuthSession } from "../types"
-import { getUserInitials } from "../utils/auth"
+import { getSessionLockedOrganization, getUserInitials } from "../utils/auth"
 import { Icon } from "./Icon"
 
 type AccountMenuProps = {
@@ -49,11 +49,13 @@ export function AccountMenu({
     }
   }, [open])
 
+  const lockedOrg = getSessionLockedOrganization(session)
   const accountSubtitle =
-    session.role === "admin" ? "Administrator PRP" : "Semua Unit"
+    session.role === "admin"
+      ? "Administrator PRP / Renbang"
+      : lockedOrg.unitLabel
 
-  const accountLabel =
-    session.role === "admin" ? "Admin PRP" : session.displayName
+  const accountLabel = session.displayName
 
   const sopMenuLabel =
     session.role === "admin"

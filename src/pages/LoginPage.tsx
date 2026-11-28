@@ -1,6 +1,7 @@
 import { useRef, useState } from "react"
 import { useAuth } from "../AuthContext"
 import { Icon } from "../components/Icon"
+import { UNIT_ACCOUNTS } from "../utils/auth"
 import { useLoginMotion } from "../utils/useMotion"
 
 export function LoginPage({
@@ -65,7 +66,10 @@ export function LoginPage({
           <div className="login-form-head">
             <h2>Masuk Akun</h2>
             <p>
-              Masukkan username admin atau Unit beserta kata sandi Anda.
+              Gunakan akun <strong>admin</strong> / <strong>renbang</strong> atau
+              kode unit kerja (contoh: <strong>fket</strong>, <strong>ftik</strong>,{" "}
+              <strong>baum</strong>, <strong>bpk</strong>). Unit kerja terkunci
+              otomatis sesuai sesi login.
             </p>
           </div>
 
@@ -78,17 +82,29 @@ export function LoginPage({
 
           <form className="login-form" onSubmit={handleSubmit}>
             <label className="login-field" htmlFor="login-username">
-              <span>Username</span>
+              <span>Username Akun / Kode Unit</span>
               <input
                 id="login-username"
                 name="username"
                 type="text"
+                list="sipetri-login-accounts"
                 autoComplete="username"
-                placeholder="Masukkan username"
+                placeholder="Contoh: admin, renbang, fket, baum, bpk"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
               />
+              <datalist id="sipetri-login-accounts">
+                <option value="admin">Admin PRP (Verifikasi & Master)</option>
+                <option value="renbang">Admin Renbang (Master & Monitoring)</option>
+                {UNIT_ACCOUNTS.map((acc) => (
+                  <option key={acc.userId} value={acc.username}>
+                    {acc.parentUnit === acc.subUnit
+                      ? acc.subUnit
+                      : `${acc.parentUnit} - ${acc.subUnit}`}
+                  </option>
+                ))}
+              </datalist>
             </label>
 
             <label className="login-field" htmlFor="login-password">

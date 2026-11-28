@@ -45,21 +45,18 @@ export function buildRecordRows(record: HistoryRecord): (string | number)[][] {
       ["Status", record.status],
       [],
       [
-        "NO",
-        "STRATEGI",
-        "NO PROGRAM",
+        "No",
+        "SASARAN STRATEGIS",
         "PROGRAM KERJA",
-        "SASARAN",
+        "SASARAN KINERJA",
         "BULAN PELAKSANAAN PROGRAM KERJA",
         "KETERANGAN",
       ],
-      ["1", "2", "3", "4", "5", "6", "7"],
     ]
 
+    let rowNo = 0
     if (record.criteriaData && record.criteriaData.length > 0) {
-      record.criteriaData.forEach((crit, cIdx) => {
-        rows.push([cIdx + 1, crit.name, "", "", "", "", ""])
-
+      record.criteriaData.forEach((crit) => {
         const strats =
           crit.strategies && crit.strategies.length > 0
             ? crit.strategies
@@ -67,36 +64,30 @@ export function buildRecordRows(record: HistoryRecord): (string | number)[][] {
               ? [crit.strategy]
               : []
 
-        strats.forEach((strat, sIdx) => {
-          const stratNum = `${cIdx + 1}.${sIdx + 1}`
-          strat.programs.forEach((prog, pIdx) => {
-            const progNum = `${stratNum}.${pIdx + 1}`
+        strats.forEach((strat) => {
+          const stratName = strat.name || crit.name || "-"
+          strat.programs.forEach((prog) => {
             const sList =
               prog.sasaranList && prog.sasaranList.length > 0
                 ? prog.sasaranList
                 : prog.targets.map((t) => ({
-                  sasaran: t.sasaran ?? t.target ?? "",
-                  bulan_mulai: t.bulan_mulai ?? t.monthStart ?? "",
-                  bulan_selesai: t.bulan_selesai ?? t.monthEnd ?? "",
-                  keterangan: t.keterangan ?? t.notes ?? "",
-                }))
+                    sasaran: t.sasaran ?? t.target ?? "",
+                    bulan_mulai: t.bulan_mulai ?? t.monthStart ?? "",
+                    bulan_selesai: t.bulan_selesai ?? t.monthEnd ?? "",
+                    keterangan: t.keterangan ?? t.notes ?? "",
+                  }))
 
-            sList.forEach((sas, sasIdx) => {
-              const stratNoCell = pIdx === 0 && sasIdx === 0 ? stratNum : ""
-              const stratNameCell =
-                pIdx === 0 && sasIdx === 0 ? strat.name : ""
-              const progNoCell = sasIdx === 0 ? progNum : ""
-              const progNameCell = sasIdx === 0 ? prog.name : ""
+            sList.forEach((sas) => {
+              rowNo += 1
               const bulanCell = formatBulanPelaksanaan(
                 sas.bulan_mulai,
                 sas.bulan_selesai,
               )
 
               rows.push([
-                stratNoCell,
-                stratNameCell,
-                progNoCell,
-                progNameCell,
+                rowNo,
+                stratName,
+                prog.name || "-",
                 sas.sasaran || "-",
                 bulanCell,
                 sas.keterangan || "-",
@@ -110,11 +101,9 @@ export function buildRecordRows(record: HistoryRecord): (string | number)[][] {
         record.items.find((i) =>
           i.label.toLowerCase().includes(lbl.toLowerCase()),
         )?.value ?? "-"
-      rows.push([1, getVal("Kriteria"), "", "", "", "", ""])
       rows.push([
-        "1.1",
+        1,
         getVal("Strategi"),
-        "1.1.1",
         getVal("Program"),
         getVal("Sasaran"),
         getVal("Bulan"),
@@ -126,6 +115,7 @@ export function buildRecordRows(record: HistoryRecord): (string | number)[][] {
   }
 
   const triwulanPrograms = getTriwulanData(record)
+  const docYear = record.period.match(/\b(\d{4})\b/)?.[1] ?? "2026"
   const rows: (string | number)[][] = [
     ["LAPORAN KINERJA TRIWULAN"],
     ["ID Dokumen", record.id],
@@ -136,27 +126,34 @@ export function buildRecordRows(record: HistoryRecord): (string | number)[][] {
     ["Status", record.status],
     [],
     [
-      "NO",
-      "PROGRAM KERJA",
-      "SASARAN",
+      "No",
+      "Sasaran Strategis",
+      `Program Kerja ${docYear}`,
+      "Sasaran",
       "BULAN PELAKSANAAN PROGRAM KERJA",
-      "TAHAP PELAKSANAAN (URAIAN)",
-      "REALISASI PELAKSANAAN (URAIAN)",
-      "REALISASI PELAKSANAAN (%)",
-      "KENDALA",
-      "RENCANA PENYELESAIAN KENDALA",
-      "WAKTU PENYELESAIAN KENDALA",
+      "Tahap Pelaksanaan (Uraian)",
+      "Realisasi Pelaksanaan (Uraian)",
+      "Realisasi Pelaksanaan (%)",
+      "Kendala (diisi jika program kerja belum terlaksana)",
+      "Rencana Penyelesaian Kendala (diisi jika pencapaian program kerja tidak sesuai dengan rencana)",
+      "Waktu Penyelesaian kendala (diisi jika pencapaian program kerja tidak sesuai dengan rencana)",
       "KETERANGAN",
-      "LINK EVIDENCE",
+      "Link Evidence",
     ],
-    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"],
   ]
 
-  triwulanPrograms.forEach((prog, pIdx) => {
-    prog.sasaranList.forEach((sas, sIdx) => {
+  let rowNo = 0
+  triwulanPrograms.forEach((prog) => {
+    prog.sasaranList.forEach((sas) => {
+      rowNo += 1
+      const ketWithLate =
+        sas.lateStatus && sas.lateStatus !== "Tepat Waktu"
+          ? `[${sas.lateStatus}] ${sas.notes}`
+          : sas.notes
       rows.push([
-        sIdx === 0 ? pIdx + 1 : "",
-        sIdx === 0 ? prog.program : "",
+        rowNo,
+        sas.strategicGoal || prog.strategicGoal,
+        prog.program,
         sas.target,
         sas.month,
         sas.stage,
@@ -165,7 +162,7 @@ export function buildRecordRows(record: HistoryRecord): (string | number)[][] {
         sas.obstacle,
         sas.solution,
         sas.solutionTime,
-        sas.notes,
+        ketWithLate,
         sas.evidence,
       ])
     })
@@ -178,10 +175,10 @@ export function exportRecordExcel(record: HistoryRecord): string {
   const rows = buildRecordRows(record)
   if (record.type === "Sasaran Kinerja") {
     triggerCsvDownload(`${record.id}_Sasaran_Kinerja.csv`, rows)
-    return "File Excel Sasaran Kinerja (7 Kolom) berhasil diunduh."
+    return "File Excel Sasaran Kinerja (6 Kolom) berhasil diunduh."
   }
   triggerCsvDownload(`${record.id}_Laporan_Triwulan.csv`, rows)
-  return "File Excel Laporan Triwulan (12 Kolom) berhasil diunduh."
+  return "File Excel Laporan Triwulan (13 Kolom) berhasil diunduh."
 }
 
 function buildSummaryIndexRows(
@@ -532,7 +529,7 @@ export function buildMasterWorkbookBytes(
   )
 
   const triwulanDetailRows: (string | number)[][] = [
-    ["RINCIAN MASTER LAPORAN REALISASI TRIWULAN (12 KOLOM)"],
+    ["RINCIAN MASTER LAPORAN REALISASI TRIWULAN (13 KOLOM)"],
     [],
     [
       "ID DOKUMEN",
@@ -540,7 +537,8 @@ export function buildMasterWorkbookBytes(
       "UNIT UTAMA",
       "SUB UNIT",
       "STATUS",
-      "NO PROGRAM",
+      "NO",
+      "SASARAN STRATEGIS",
       "PROGRAM KERJA",
       "SASARAN",
       "BULAN PELAKSANAAN",
@@ -550,6 +548,7 @@ export function buildMasterWorkbookBytes(
       "KENDALA",
       "RENCANA PENYELESAIAN",
       "WAKTU PENYELESAIAN",
+      "STATUS KETERLAMBATAN",
       "KETERANGAN",
       "LINK EVIDENCE",
     ],
@@ -558,15 +557,18 @@ export function buildMasterWorkbookBytes(
   for (const rec of submitted.filter((r) => r.type === "Laporan Triwulan")) {
     const org = resolveOrganization(rec)
     const progs = getTriwulanData(rec)
-    progs.forEach((prog, pIdx) => {
+    let rNo = 0
+    progs.forEach((prog) => {
       prog.sasaranList.forEach((sas) => {
+        rNo += 1
         triwulanDetailRows.push([
           rec.id,
           rec.period,
           org?.parentUnit ?? rec.parentUnit ?? rec.unit,
           org?.subUnit ?? rec.subUnit ?? rec.unit,
           rec.status,
-          pIdx + 1,
+          rNo,
+          sas.strategicGoal || prog.strategicGoal,
           prog.program,
           sas.target,
           sas.month,
@@ -576,6 +578,7 @@ export function buildMasterWorkbookBytes(
           sas.obstacle,
           sas.solution,
           sas.solutionTime,
+          sas.lateStatus ?? "Tepat Waktu",
           sas.notes,
           sas.evidence,
         ])
@@ -584,7 +587,7 @@ export function buildMasterWorkbookBytes(
   }
 
   const sasaranDetailRows: (string | number)[][] = [
-    ["RINCIAN MASTER SASARAN KINERJA TAHUNAN / RKA (7 KOLOM)"],
+    ["RINCIAN MASTER SASARAN KINERJA TAHUNAN / RKA (6 KOLOM)"],
     [],
     [
       "ID DOKUMEN",
@@ -592,10 +595,9 @@ export function buildMasterWorkbookBytes(
       "UNIT UTAMA",
       "SUB UNIT",
       "STATUS",
-      "KRITERIA",
-      "STRATEGI",
+      "SASARAN STRATEGIS",
       "PROGRAM KERJA",
-      "SASARAN",
+      "SASARAN KINERJA",
       "BULAN PELAKSANAAN",
       "KETERANGAN",
     ],
@@ -612,6 +614,7 @@ export function buildMasterWorkbookBytes(
               ? [crit.strategy]
               : []
         strats.forEach((strat) => {
+          const goalName = strat.name || crit.name || "-"
           strat.programs.forEach((prog) => {
             const sList =
               prog.sasaranList && prog.sasaranList.length > 0
@@ -629,8 +632,7 @@ export function buildMasterWorkbookBytes(
                 org?.parentUnit ?? rec.parentUnit ?? rec.unit,
                 org?.subUnit ?? rec.subUnit ?? rec.unit,
                 rec.status,
-                crit.name,
-                strat.name,
+                goalName,
                 prog.name,
                 sas.sasaran || "-",
                 formatBulanPelaksanaan(sas.bulan_mulai, sas.bulan_selesai),
@@ -651,7 +653,6 @@ export function buildMasterWorkbookBytes(
         org?.parentUnit ?? rec.parentUnit ?? rec.unit,
         org?.subUnit ?? rec.subUnit ?? rec.unit,
         rec.status,
-        getVal("Kriteria"),
         getVal("Strategi"),
         getVal("Program"),
         getVal("Sasaran"),
@@ -793,7 +794,7 @@ export function exportArchiveMasterXlsx(
   const bytes = buildMasterWorkbookBytes(records, yearFilter, quarterFilter)
   triggerBlobDownload(
     `Rekap_Master_SIPETRI_${yearLabel}${quarterLabel}.xlsx`,
-    new Blob([bytes], {
+    new Blob([bytes as BlobPart], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }),
   )
@@ -861,7 +862,7 @@ export function exportArchiveUnitZip(
   const bytes = buildUnitPackageZipBytes(records, yearFilter, quarterFilter)
   triggerBlobDownload(
     `Arsip_Paket_Unit_SIPETRI_${yearLabel}${quarterLabel}.zip`,
-    new Blob([bytes], { type: "application/zip" }),
+    new Blob([bytes as BlobPart], { type: "application/zip" }),
   )
   return `Arsip Paket Unit (${records.length} dokumen dalam folder unit .zip) berhasil diunduh.`
 }

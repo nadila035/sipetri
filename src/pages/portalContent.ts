@@ -134,15 +134,15 @@ export const PORTAL_FAQ_CATEGORIES: PortalFaqCategory[] = [
       {
         id: "faq-cara-masuk",
         question:
-          "Bagaimana cara masuk ke SIPETRI untuk unit kerja dan Admin PRP?",
+          "Bagaimana cara masuk ke SIPETRI untuk unit kerja dan Admin PRP / Renbang?",
         answer:
-          'Klik tombol Masuk Aplikasi pada halaman ini untuk menuju gerbang login. Gunakan username "unit" untuk masuk ke ruang kerja pelaporan unit atau "admin" untuk membuka pusat kendali Admin PRP beserta kata sandi Anda.',
+          'Klik tombol Masuk Aplikasi pada halaman ini untuk menuju gerbang login. Gunakan kode unit kerja Anda (contoh: "fket", "ftik", "baum", "bpk") untuk masuk ke ruang kerja unit yang terkunci otomatis, atau gunakan "admin" / "renbang" untuk membuka pusat kendali Admin PRP dan Renbang.',
       },
       {
         id: "faq-isolasi-data",
-        question: "Bagaimana pemilihan unit saat mengisi laporan di ruang kerja staf?",
+        question: "Mengapa Unit Organisasi pada formulir terkunci otomatis dan menu Laporan Triwulan tidak bisa dibuka di awal?",
         answer:
-          "Saat mengisi Sasaran Kinerja atau Laporan Triwulan, Anda dapat langsung memilih Unit Utama dan Sub Unit dari daftar resmi 42 unit kerja ITPLN, sementara Admin PRP bertugas memantau dan memverifikasi seluruh kiriman.",
+          "Nama unit kerja dikunci otomatis sesuai sesi akun unit yang sedang login. Selain itu, alur pelaporan bersifat hierarkis: unit wajib mengisi dan mendapatkan persetujuan (ACC) Sasaran Kinerja terlebih dahulu sebelum lembar kerja Laporan Triwulan terbuka dan terisi otomatis.",
       },
     ],
   },

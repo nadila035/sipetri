@@ -1,6 +1,36 @@
 import type { ReactNode } from "react"
 
-export type IconName = "grid" | "report" | "target" | "history" | "bell" | "search" | "arrow" | "arrowLeft" | "check" | "clock" | "chart" | "calendar" | "help" | "chevron" | "chevronDown" | "eye" | "eyeOff" | "plus" | "trash" | "download" | "note" | "lock" | "logout" | "send" | "broadcast" | "sidebarPanel" | "sidebarOpen" | "sidebarClose"
+export type IconName =
+  | "grid"
+  | "report"
+  | "target"
+  | "history"
+  | "bell"
+  | "search"
+  | "arrow"
+  | "arrowLeft"
+  | "check"
+  | "clock"
+  | "chart"
+  | "calendar"
+  | "help"
+  | "chevron"
+  | "chevronDown"
+  | "eye"
+  | "eyeOff"
+  | "plus"
+  | "trash"
+  | "download"
+  | "note"
+  | "lock"
+  | "logout"
+  | "send"
+  | "broadcast"
+  | "sidebarPanel"
+  | "sidebarOpen"
+  | "sidebarClose"
+  | "alert"
+  | "layers"
 
 export type NavItem = {
   label: string
@@ -14,7 +44,22 @@ export type ActionCardItem = {
   tone: string
 }
 
+export type MasterStrategicGoal = {
+  id: string
+  code: string
+  name: string
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type LateStatus =
+  | "Tepat Waktu"
+  | "Terlambat"
+  | "Pencapaian Terlambat"
+
 export type ReportRow = {
+  strategicGoal?: string
   program: string
   target: string
   monthStart: string
@@ -35,6 +80,8 @@ export type TriwulanSasaranItem = {
     recordId: string
     criteriaId: string
     strategyId: string
+    strategicGoalId?: string
+    strategicGoal?: string
     programId: string
     targetId: string
     year: string
@@ -48,6 +95,8 @@ export type TriwulanSasaranItem = {
     notes: string
   }
   id: string
+  strategicGoalId?: string
+  strategicGoal?: string
   target: string
   monthStart: string
   monthEnd?: string
@@ -55,6 +104,15 @@ export type TriwulanSasaranItem = {
   stageTargetTime?: string
   realization: string
   percentage: string
+  priorPercentage?: number
+  carryOverFromQuarter?: string
+  startQuarter?: string
+  targetQuarter?: string
+  isLockedCompleted?: boolean
+  completedInQuarter?: string
+  lateStatus?: LateStatus
+  adminLateNote?: string
+  draftSavedAt?: string
   notes: string
   obstacle: string
   solution: string
@@ -64,6 +122,8 @@ export type TriwulanSasaranItem = {
 
 export type TriwulanProgramItem = {
   id: string
+  strategicGoalId?: string
+  strategicGoal?: string
   program: string
   sasaranList: TriwulanSasaranItem[]
 }
@@ -103,6 +163,7 @@ export type ProgramKerja = WorkProgram
 
 export type StrategyItem = {
   id: string
+  strategicGoalId?: string
   name: string
   programs: WorkProgram[]
 }
@@ -138,6 +199,7 @@ export type HistoryRecord = {
   progress: number
   items: HistoryItem[]
   author?: string
+  lateNotes?: Record<string, LateStatus>
   reviews?: {
     id: string
     at: string
@@ -174,6 +236,7 @@ export type NotificationCategory =
   | "document_submitted"
   | "revision_resubmitted"
   | "deadline_reminder"
+  | "master_strategy_updated"
 
 export type AppNotification = {
   id: string
@@ -217,3 +280,5 @@ export type AuthSession = AuthAccountSummary & {
 export type LoginResult =
   | { ok: true; session: AuthSession }
   | { ok: false; error: string }
+
+export type CustomDialogFooter = ReactNode

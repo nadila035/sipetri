@@ -7323,3 +7323,1303 @@ footer {
     overflow-wrap: anywhere;
   }
 }
+
+
+/* =========================================================================
+   SIPETRI Upgraded Tables (6-Col Green & 13-Col Triwulan Grid), Modals,
+   Session Lock, Prerequisite Lock, Master Sasaran Strategis, & Late Monitor
+   ========================================================================= */
+
+.nav-item.is-locked-nav {
+  opacity: 0.62;
+  cursor: not-allowed;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.nav-lock-pill {
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.nav-count-badge {
+  margin-left: auto;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 99px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 10.5px;
+  font-weight: 800;
+}
+
+.app-shell.is-sidebar-collapsed :is(.nav-lock-pill, .nav-count-badge) {
+  display: none;
+}
+
+.action-card.is-locked-card {
+  opacity: 0.68;
+  cursor: not-allowed;
+  background: #f8fafc;
+}
+
+.action-icon.amber {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.action-lock-tag {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.session-lock-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.locked-session-unit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.locked-unit-field {
+  display: grid;
+  gap: 2px;
+  padding: 8px 11px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.locked-unit-field span {
+  color: #526176;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.locked-unit-field strong {
+  color: #17213a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.prerequisite-locked-panel {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 36px 24px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.prerequisite-locked-icon {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.prerequisite-locked-panel h2 {
+  margin: 0;
+  font-family: Manrope, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: #17213a;
+}
+
+.prerequisite-locked-panel p {
+  max-width: 620px;
+  margin: 0;
+  color: #475569;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.prerequisite-locked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.prerequisite-status-banner,
+.carryover-alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-radius: 11px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+}
+
+.prerequisite-status-banner.is-approved {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #065f46;
+}
+
+.prerequisite-status-banner.is-waiting {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.prerequisite-status-banner.is-revision,
+.carryover-alert-banner {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.prerequisite-banner-copy,
+.carryover-alert-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.prerequisite-banner-copy strong,
+.carryover-alert-copy strong {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.prerequisite-banner-copy span,
+.carryover-alert-copy span {
+  font-size: 12px;
+  color: #334155;
+}
+
+.prerequisite-banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.matrix-grid-panel {
+  padding: 18px;
+  border: 1px solid #dce3ec;
+  border-radius: 13px;
+  background: #ffffff;
+}
+
+.matrix-grid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.matrix-grid-toolbar-copy {
+  min-width: 240px;
+  flex: 1;
+}
+
+.matrix-grid-toolbar-copy h2 {
+  margin: 0;
+  font-family: Manrope, sans-serif;
+  font-size: 15.5px;
+  font-weight: 800;
+  color: #17213a;
+}
+
+.matrix-grid-toolbar-copy p {
+  margin: 4px 0 0;
+  color: #475569;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.matrix-grid-toolbar-actions,
+.matrix-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.matrix-filter-pills {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 9px;
+  background: #f1f5f9;
+}
+
+.matrix-filter-pills button {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.matrix-filter-pills button.is-active {
+  background: #ffffff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.matrix-search-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #475569;
+}
+
+.matrix-search-input input {
+  border: 0;
+  outline: 0;
+  min-width: 190px;
+  font-size: 12.5px;
+  color: #17213a;
+  background: transparent;
+}
+
+.official-grid-scroll {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+}
+
+/* Image 1: 6-Column Sasaran Kinerja Table with Full Green Header */
+table.sasaran-green-table,
+table.sasaran-green-print-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+table.sasaran-green-table thead th,
+table.sasaran-green-print-table thead th {
+  padding: 11px 10px;
+  background: #4ed64e !important;
+  color: #0b190e !important;
+  border: 1px solid #1e293b !important;
+  font-family: Manrope, sans-serif;
+  font-size: 11.5px;
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: center;
+  vertical-align: middle;
+}
+
+table.sasaran-green-table tbody td,
+table.sasaran-green-print-table tbody td {
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  color: #17213a;
+  font-size: 12.5px;
+  line-height: 1.45;
+  vertical-align: top;
+}
+
+table.sasaran-green-table tbody td.col-no {
+  width: 48px;
+  text-align: center;
+  font-weight: 700;
+}
+
+table.sasaran-green-table tbody td.col-months {
+  text-align: center;
+  white-space: nowrap;
+}
+
+table.sasaran-green-table tbody td.col-actions {
+  width: 168px;
+  text-align: center;
+}
+
+/* Image 2: 13-Column Laporan Triwulan Table with Sky Blue, Pink, Green, Yellow Headers */
+table.triwulan-grid-table,
+table.triwulan-color-print-table {
+  width: 100%;
+  min-width: 1460px;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+table.triwulan-grid-table thead th,
+table.triwulan-color-print-table thead th {
+  padding: 10px 8px;
+  border: 1px solid #1e293b !important;
+  font-family: Manrope, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: center;
+  vertical-align: middle;
+}
+
+table.triwulan-grid-table thead th.th-blue,
+table.triwulan-color-print-table thead th.th-blue {
+  background: #9ed9f7 !important;
+  color: #0f1e36 !important;
+}
+
+table.triwulan-grid-table thead th.th-pink,
+table.triwulan-color-print-table thead th.th-pink {
+  background: #f7d4ea !important;
+  color: #281120 !important;
+}
+
+table.triwulan-grid-table thead th.th-green,
+table.triwulan-color-print-table thead th.th-green {
+  background: #93e38d !important;
+  color: #0d2211 !important;
+}
+
+table.triwulan-grid-table thead th.th-yellow,
+table.triwulan-color-print-table thead th.th-yellow {
+  background: #fff212 !important;
+  color: #1c1900 !important;
+}
+
+table.triwulan-grid-table thead th.th-action {
+  position: sticky;
+  right: 0;
+  z-index: 3;
+  background: #17213a !important;
+  color: #ffffff !important;
+  min-width: 120px;
+}
+
+table.triwulan-grid-table tbody td {
+  padding: 9px 9px;
+  border: 1px solid #cbd5e1;
+  color: #17213a;
+  font-size: 12px;
+  line-height: 1.45;
+  vertical-align: top;
+}
+
+table.triwulan-grid-table tbody td.col-no {
+  width: 44px;
+  text-align: center;
+  font-weight: 700;
+}
+
+table.triwulan-grid-table tbody td.col-pct,
+table.triwulan-grid-table tbody td.col-months {
+  text-align: center;
+}
+
+table.triwulan-grid-table tbody td.col-sticky-action {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: #f8fafc;
+  text-align: center;
+  vertical-align: middle;
+  box-shadow: -2px 0 6px rgba(15, 23, 42, 0.06);
+}
+
+tr.matrix-clickable-row {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+tr.matrix-clickable-row:hover td {
+  background-color: #f1f6fe;
+}
+
+tr.matrix-clickable-row.is-locked-completed td {
+  background-color: #f8fafc;
+  color: #475569;
+}
+
+tr.matrix-clickable-row.is-late-row td {
+  background-color: #fffafa;
+}
+
+tr.matrix-clickable-row.is-row-invalid td {
+  background-color: #fff1f2;
+}
+
+.matrix-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.matrix-btn-edit,
+.matrix-btn-fill,
+.matrix-btn-sub,
+.matrix-btn-locked,
+.matrix-btn-delete {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.matrix-btn-fill {
+  background: #2864ca;
+  border: 1px solid #245bb8;
+  color: #ffffff;
+}
+
+.matrix-btn-edit {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+}
+
+.matrix-btn-sub {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+}
+
+.matrix-btn-locked {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.matrix-btn-delete {
+  padding: 0 8px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.pct-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.pct-pill.is-full {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.pct-pill.is-partial {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.pct-pill.is-empty {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.late-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 10.5px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.late-badge.is-overdue {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.late-badge.is-late-done {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.late-badge.is-closed-100 {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.notes-stack {
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+}
+
+.cell-sub-meta {
+  display: block;
+  margin-top: 3px;
+  color: #526176;
+  font-size: 10.5px;
+}
+
+.cell-goal-tag {
+  display: block;
+  margin-bottom: 2px;
+  color: #1d4ed8;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.grid-evidence-link {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.matrix-empty-cell {
+  padding: 34px 18px !important;
+}
+
+.matrix-empty-state {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 8px;
+  color: #475569;
+}
+
+.matrix-empty-state strong {
+  color: #17213a;
+  font-size: 14px;
+}
+
+.matrix-empty-state p {
+  max-width: 520px;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Pop-up Modal Editor for Sasaran Kinerja & Laporan Triwulan */
+.triwulan-row-modal {
+  position: relative;
+  z-index: 2;
+  width: min(640px, 95vw);
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.triwulan-row-modal.is-wide {
+  width: min(820px, 96vw);
+}
+
+.triwulan-row-modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 20px;
+  background: #162a52;
+  color: #ffffff;
+}
+
+.triwulan-modal-kicker {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #bfdbfe;
+}
+
+.triwulan-row-modal-head h2 {
+  margin: 3px 0 0;
+  font-family: Manrope, sans-serif;
+  font-size: 17px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.triwulan-modal-close {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.triwulan-row-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 20px;
+  display: grid;
+  gap: 14px;
+}
+
+.inherited-rka-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.inherited-rka-summary span {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.inherited-rka-summary strong {
+  font-size: 12.5px;
+  color: #17213a;
+}
+
+.locked-100-callout,
+.carryover-modal-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+
+.locked-100-callout {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.carryover-modal-callout {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.locked-100-callout strong,
+.carryover-modal-callout strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.modal-form-field {
+  display: grid;
+  gap: 5px;
+}
+
+.modal-form-field span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.modal-form-field span b {
+  color: #dc2626;
+}
+
+.modal-form-field span small {
+  font-weight: 500;
+  color: #526176;
+}
+
+.modal-form-field input,
+.modal-form-field select,
+.modal-form-field textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17213a;
+  font-size: 13px;
+}
+
+.modal-form-field input:focus-visible,
+.modal-form-field select:focus-visible,
+.modal-form-field textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+.modal-form-two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.modal-form-three-col {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pct-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pct-input-row input {
+  width: 110px;
+  font-weight: 700;
+}
+
+.pct-quick-btns {
+  display: flex;
+  gap: 5px;
+}
+
+.pct-quick-btns button {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.modal-obstacle-box {
+  padding: 13px;
+  border: 1px solid #f5b8db;
+  border-radius: 10px;
+  background: #fdf4f9;
+  display: grid;
+  gap: 10px;
+}
+
+.modal-obstacle-head strong {
+  display: block;
+  font-size: 12.5px;
+  color: #281120;
+}
+
+.modal-obstacle-head span {
+  font-size: 11.5px;
+  color: #581c45;
+}
+
+.triwulan-row-modal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.triwulan-modal-foot-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Master Sasaran Strategis & Late Monitoring */
+.master-goals-module,
+.late-monitoring-page {
+  display: grid;
+  gap: 16px;
+}
+
+.goal-code-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  font-size: 11.5px;
+  font-weight: 800;
+}
+
+.goal-usage-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.btn-danger-outline {
+  border-color: #fecaca !important;
+  color: #991b1b !important;
+  background: #fef2f2 !important;
+}
+
+.primary-button.is-danger-btn {
+  background: #b91c1c;
+  border-color: #991b1b;
+}
+
+.overdue-period-bar {
+  padding: 16px 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.overdue-period-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.overdue-period-head strong {
+  display: block;
+  font-family: Manrope, sans-serif;
+  font-size: 15px;
+  color: #17213a;
+}
+
+.overdue-period-head span {
+  font-size: 12.5px;
+  color: #475569;
+}
+
+.overdue-year-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.overdue-year-select select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.overdue-quarter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.overdue-quarter-tabs button {
+  min-height: 38px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.overdue-quarter-tabs button b {
+  padding: 1px 7px;
+  border-radius: 99px;
+  background: #f1f5f9;
+  color: #1e293b;
+  font-size: 11px;
+}
+
+.overdue-quarter-tabs button.is-active {
+  border-color: #245bb8;
+  background: #2864ca;
+  color: #ffffff;
+}
+
+.overdue-quarter-tabs button.is-active b {
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}
+
+.overdue-quarter-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.admin-late-status-select {
+  width: 100%;
+  margin-top: 6px;
+  height: 30px;
+  padding: 0 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #17213a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .locked-session-unit-grid,
+  .inherited-rka-summary,
+  .modal-form-two-col,
+  .modal-form-three-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .prerequisite-status-banner,
+  .carryover-alert-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .matrix-search-input {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .matrix-search-input input {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .matrix-filter-pills button,
+  .overdue-quarter-tabs button,
+  .late-extra-filters input,
+  .late-extra-filters select,
+  .overdue-year-select select,
+  .matrix-btn-edit,
+  .matrix-btn-fill,
+  .matrix-btn-sub,
+  .matrix-btn-locked,
+  .matrix-btn-delete,
+  .triwulan-modal-close,
+  .pct-quick-btns button,
+  .secondary-button,
+  .primary-button {
+    min-height: 44px;
+  }
+
+  .triwulan-row-modal,
+  .triwulan-row-modal.is-wide {
+    width: 100%;
+    max-height: 92dvh;
+  }
+
+  .triwulan-row-modal-foot,
+  .triwulan-modal-foot-right {
+    width: 100%;
+  }
+
+  .triwulan-modal-foot-right button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}
+
+
+/* =========================================================================
+   Strict Viewport Containment & Mobile Reflow Fixes (Zero Horizontal Overflow)
+   ========================================================================= */
+
+@media screen {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .app-shell {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .main {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .content {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+.report-page,
+.target-page,
+.late-monitoring-page,
+.master-goals-module,
+.history-page,
+.admin-page {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.matrix-grid-panel,
+.panel,
+.welcome,
+.welcome-copy,
+.report-identity,
+.identity-block,
+.identity-content,
+.report-summary,
+.report-heading {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.secondary-button,
+.primary-button {
+  height: auto;
+  min-height: 36px;
+  padding: 8px 14px;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.report-heading {
+  flex-wrap: wrap;
+}
+
+.official-grid-scroll,
+.admin-table-wrap {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.master-goals-module .admin-panel,
+.late-monitoring-page .admin-panel {
+  padding: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.late-extra-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.late-extra-filters label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.late-extra-filters label span {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.late-extra-filters input,
+.late-extra-filters select {
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #17213a;
+  font-size: 12.5px;
+}
+
+.late-extra-filters input:focus-visible,
+.late-extra-filters select:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
+.master-goals-module .admin-table-wrap table,
+.late-monitoring-page .admin-table-wrap table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+}
+
+.master-goals-module .admin-table-wrap th,
+.late-monitoring-page .admin-table-wrap th {
+  padding: 10px 12px;
+  border-bottom: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-family: Manrope, sans-serif;
+  font-size: 11.5px;
+  font-weight: 800;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.master-goals-module .admin-table-wrap td,
+.late-monitoring-page .admin-table-wrap td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #17213a;
+  font-size: 12.5px;
+  line-height: 1.45;
+  vertical-align: top;
+}
+
+@media (max-width: 760px) {
+  #root .app-shell .topbar {
+    height: auto;
+    min-height: 68px;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  #root .app-shell .page-title {
+    font-size: 16.5px;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  #root .app-shell .breadcrumb {
+    font-size: 10.5px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  #root .app-shell .content {
+    padding: 14px;
+  }
+
+  #root .app-shell .content > .welcome:not(.admin-welcome) {
+    padding: 18px 16px;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  #root .app-shell .welcome-copy button {
+    max-width: 100%;
+    white-space: normal;
+    text-align: left;
+    min-height: 44px;
+  }
+
+  #root .app-shell .report-heading {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  #root .app-shell .report-heading > .primary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  #root .app-shell .sidebar {
+    max-width: 100vw;
+    padding-inline: 4px;
+  }
+
+  #root .app-shell .side-nav {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-auto-flow: row;
+    gap: 2px;
+    overflow-x: hidden;
+  }
+
+  #root .app-shell .side-nav:has(> button:nth-child(6)) {
+    display: flex;
+    overflow-x: auto;
+    gap: 4px;
+  }
+
+  #root .app-shell .side-nav:has(> button:nth-child(6)) > .nav-item {
+    flex: 0 0 76px;
+  }
+
+  #root .app-shell .nav-item,
+  #root .app-shell .nav-item span.nav-item-label {
+    font-size: 9.5px;
+    line-height: 1.15;
+    padding-inline: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #root .app-shell .nav-lock-pill {
+    display: none;
+  }
+
+  #root .app-shell .nav-count-badge {
+    position: absolute;
+    top: 3px;
+    right: 6px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 9px;
+  }
+}

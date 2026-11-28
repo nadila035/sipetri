@@ -27,13 +27,34 @@ export function reviseRecord(
   const take = (label: string, fallback: string) =>
     values.get(label)?.shift() ?? fallback
 
+  const takeAny = (labels: string[], fallback: string) => {
+    for (const label of labels) {
+      const bucket = values.get(label)
+      if (bucket && bucket.length > 0) {
+        return bucket.shift() ?? fallback
+      }
+    }
+    return fallback
+  }
+
   const dates = (value: string) => value.split(/\s+[–-]\s+/)
 
   const triwulanPrograms = record.triwulanPrograms?.map((p) => {
     let program = p.program
+    let strategicGoal = p.strategicGoal ?? ""
     let updatedProgram = false
+    let updatedGoal = false
 
     const sasaranList = p.sasaranList.map((s) => {
+      const takenGoal = take(
+        "Sasaran Strategis",
+        s.strategicGoal || strategicGoal,
+      )
+      if (!updatedGoal && takenGoal && takenGoal !== "-") {
+        strategicGoal = takenGoal
+        updatedGoal = true
+      }
+
       const takenProgram = take("Program Kerja", program)
       if (!updatedProgram) {
         program = takenProgram
@@ -45,7 +66,7 @@ export function reviseRecord(
       const [monthStart, monthEnd] = dates(
         take(
           "Bulan Pelaksanaan",
-          [s.monthStart, s.monthEnd].filter(Boolean).join(" – "),
+          [s.monthStart, s.monthEnd].filter(Boolean).join(" - "),
         ),
       )
 
@@ -58,6 +79,8 @@ export function reviseRecord(
 
       return {
         ...s,
+        strategicGoal:
+          takenGoal && takenGoal !== "-" ? takenGoal : s.strategicGoal,
         target,
         monthStart,
         monthEnd,
@@ -73,62 +96,79 @@ export function reviseRecord(
       }
     })
 
-    return { ...p, program, sasaranList }
+    return { ...p, strategicGoal, program, sasaranList }
   })
 
   const criteriaData = record.criteriaData?.map((c) => {
-    const name = take("Kriteria", c.name)
+    const legacyCriteriaName = take("Kriteria", "")
 
-    const strategies = (c.strategies ?? [c.strategy]).map((st) => ({
-      ...st,
-      name: take("Strategi", st.name),
-      programs: st.programs.map((p) => {
-        const name = take("Program Kerja", p.name)
+    const strategies = (c.strategies ?? [c.strategy]).map((st) => {
+      const stratName = takeAny(
+        ["Sasaran Strategis", "Strategi"],
+        st.name || c.name,
+      )
+      return {
+        ...st,
+        name: stratName,
+        programs: st.programs.map((p) => {
+          const name = take("Program Kerja", p.name)
 
-        const sasaranList = (
-          p.sasaranList ??
-          p.targets.map((t) => ({
-            id: t.id,
-            sasaran: t.target,
-            bulan_mulai: t.monthStart,
-            bulan_selesai: t.monthEnd,
-            keterangan: t.notes,
-          }))
-        ).map((s) => {
-          const sasaran = take("Sasaran", s.sasaran)
+          const sasaranList = (
+            p.sasaranList ??
+            p.targets.map((t) => ({
+              id: t.id,
+              sasaran: t.target,
+              bulan_mulai: t.monthStart,
+              bulan_selesai: t.monthEnd,
+              keterangan: t.notes,
+            }))
+          ).map((s) => {
+            const sasaran = takeAny(
+              ["Sasaran Kinerja", "Sasaran"],
+              s.sasaran,
+            )
 
-          const [bulan_mulai, bulan_selesai] = dates(
-            take(
-              "Bulan Pelaksanaan",
-              [s.bulan_mulai, s.bulan_selesai].filter(Boolean).join(" – "),
-            ),
-          )
+            const [bulan_mulai, bulan_selesai] = dates(
+              take(
+                "Bulan Pelaksanaan",
+                [s.bulan_mulai, s.bulan_selesai].filter(Boolean).join(" - "),
+              ),
+            )
+
+            return {
+              ...s,
+              sasaran,
+              bulan_mulai,
+              bulan_selesai,
+              keterangan: take("Keterangan", s.keterangan),
+            }
+          })
 
           return {
-            ...s,
-            sasaran,
-            bulan_mulai,
-            bulan_selesai,
-            keterangan: take("Keterangan", s.keterangan),
+            ...p,
+            name,
+            sasaranList,
+            targets: sasaranList.map((s) => ({
+              id: s.id,
+              target: s.sasaran,
+              monthStart: s.bulan_mulai,
+              monthEnd: s.bulan_selesai,
+              notes: s.keterangan,
+            })),
           }
-        })
+        }),
+      }
+    })
 
-        return {
-          ...p,
-          name,
-          sasaranList,
-          targets: sasaranList.map((s) => ({
-            id: s.id,
-            target: s.sasaran,
-            monthStart: s.bulan_mulai,
-            monthEnd: s.bulan_selesai,
-            notes: s.keterangan,
-          })),
-        }
-      }),
-    }))
+    const nextCriteriaName =
+      legacyCriteriaName || strategies[0]?.name || c.name
 
-    return { ...c, name, strategies, strategy: strategies[0] }
+    return {
+      ...c,
+      name: nextCriteriaName,
+      strategies,
+      strategy: strategies[0],
+    }
   })
 
   return {

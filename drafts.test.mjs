@@ -1,6 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import {
+  TRIWULAN_ITEMS_PER_SASARAN,
   buildSasaranKinerjaItems,
   buildTriwulanItems,
   calculateSasaranKinerjaCompleteness,
@@ -24,7 +25,7 @@ test("empty initial forms report no unsaved content", () => {
   assert.equal(hasCriteriaContent(criteria, "Rektorat", ""), true)
   assert.equal(hasTriwulanContent(triwulan, "", ""), false)
 
-  criteria[0].name = "Organisasi"
+  criteria[0].strategies[0].name = "SS-01 Mutu Pendidikan"
   assert.equal(hasCriteriaContent(criteria), true)
 
   assert.equal(hasTriwulanContent(triwulan, "Rektorat", ""), true)
@@ -78,7 +79,6 @@ test("upsertDraftRecord updates existing draft without creating duplicates and p
 
 test("extractDashboardAnnualMetrics reads only submitted Sasaran Kinerja records and ignores Draf", () => {
   const criteriaSubmitted = createEmptyCriteria()
-  criteriaSubmitted.name = "Kriteria 1"
   criteriaSubmitted.strategies[0].name = "Strategi 1"
   criteriaSubmitted.strategies[0].programs[0].name = "Program 1"
   criteriaSubmitted.strategies[0].programs[0].sasaranList[0].sasaran = "Sasaran 1"
@@ -86,7 +86,6 @@ test("extractDashboardAnnualMetrics reads only submitted Sasaran Kinerja records
   criteriaSubmitted.strategies[0].programs[0].sasaranList[0].bulan_selesai = "2025-12"
 
   const criteriaDraft = createEmptyCriteria()
-  criteriaDraft.name = "Kriteria Draf"
   criteriaDraft.strategies[0].name = "Strategi Draf"
   criteriaDraft.strategies[0].programs[0].name = "Program Draf"
   criteriaDraft.strategies[0].programs[0].sasaranList[0].sasaran = "Sasaran Draf"
@@ -98,7 +97,7 @@ test("extractDashboardAnnualMetrics reads only submitted Sasaran Kinerja records
       type: "Sasaran Kinerja",
       title: "Sasaran Kinerja Tahun 2025",
       period: "Tahun 2025",
-      unit: "Unit",
+      unit: "FKET",
       sentAt: "Belum dikirim",
       status: "Draf",
       progress: 100,
@@ -110,7 +109,7 @@ test("extractDashboardAnnualMetrics reads only submitted Sasaran Kinerja records
       type: "Sasaran Kinerja",
       title: "Sasaran Kinerja Tahun 2025",
       period: "Tahun 2025",
-      unit: "Unit",
+      unit: "FKET",
       sentAt: "10 Jan 2025",
       status: "Disetujui",
       progress: 100,
@@ -127,22 +126,30 @@ test("extractDashboardAnnualMetrics reads only submitted Sasaran Kinerja records
   assert.equal(metrics.targets.length, 1)
 })
 
-test("normalizers and item builders handle blank and filled drafts safely", () => {
+test("normalizers and item builders match 6-column Sasaran Kinerja and 13-column Triwulan", () => {
   const emptyC = normalizeCriteriaList([])
   assert.equal(emptyC.length, 1)
   assert.equal(calculateSasaranKinerjaCompleteness(emptyC), 0)
 
-  emptyC[0].name = "Mutu"
-  emptyC[0].strategies[0].name = "Strategi A"
+  emptyC[0].strategies[0].name = "SS-01 Mutu Pendidikan"
   emptyC[0].strategies[0].programs[0].name = "Program A"
   emptyC[0].strategies[0].programs[0].sasaranList[0].sasaran = "Target A"
-  emptyC[0].strategies[0].programs[0].sasaranList[0].bulan_mulai = "2025-01"
+  emptyC[0].strategies[0].programs[0].sasaranList[0].bulan_mulai = "2026-01"
   assert.equal(calculateSasaranKinerjaCompleteness(emptyC), 100)
-  assert.equal(buildSasaranKinerjaItems(emptyC).length, 6)
+
+  const skItems = buildSasaranKinerjaItems(emptyC)
+  assert.equal(skItems.length, 5)
+  assert.equal(skItems[0].label, "Sasaran Strategis")
+  assert.equal(skItems[1].label, "Program Kerja")
+  assert.equal(skItems[2].label, "Sasaran Kinerja")
 
   const emptyT = normalizeTriwulanPrograms([])
   assert.equal(emptyT.length, 1)
-  assert.equal(buildTriwulanItems(emptyT).length, 11)
+  const twItems = buildTriwulanItems(emptyT)
+  assert.equal(twItems.length, TRIWULAN_ITEMS_PER_SASARAN)
+  assert.equal(twItems[0].label, "Sasaran Strategis")
+  assert.equal(twItems[1].label, "Program Kerja")
+  assert.equal(twItems[11].label, "Link Evidence")
 })
 
 test("insertItemAt inserts rows in the middle and top while shifting downstream indices", () => {
@@ -151,7 +158,6 @@ test("insertItemAt inserts rows in the middle and top while shifting downstream 
     program: label,
   }))
 
-  // Insert between #2 (index 1) and #3 (index 2)
   const insertedMid = { ...createEmptyTriwulanProgram(), program: "SISIP-TENGAH" }
   const afterMid = insertItemAt(initialPrograms, 2, insertedMid)
   assert.equal(afterMid.length, 6)
@@ -159,11 +165,7 @@ test("insertItemAt inserts rows in the middle and top while shifting downstream 
     afterMid.map((p) => p.program),
     ["P1", "P2", "SISIP-TENGAH", "P3", "P4", "P5"],
   )
-  // Old #3 is now #4 (index 3), old #5 is now #6 (index 5)
-  assert.equal(afterMid[3].program, "P3")
-  assert.equal(afterMid[5].program, "P5")
 
-  // Insert at the top (index 0)
   const insertedTop = { ...createEmptyTriwulanProgram(), program: "SISIP-ATAS" }
   const afterTop = insertItemAt(afterMid, 0, insertedTop)
   assert.deepEqual(
@@ -172,41 +174,49 @@ test("insertItemAt inserts rows in the middle and top while shifting downstream 
   )
 })
 
-test("normalizeTriwulanPrograms and buildTriwulanItems preserve stageTargetTime", () => {
+test("normalizeTriwulanPrograms preserves carry-over, lock, lateStatus, and stageTargetTime", () => {
   const normalized = normalizeTriwulanPrograms([
     {
       id: "prog-1",
+      strategicGoal: "SS-04 Transformasi Digital",
       program: "Program Uji",
       sasaranList: [
         {
           id: "sas-1",
           sasaran: "Sasaran Uji",
-          monthStart: "2026-04",
-          monthEnd: "2026-06",
+          monthStart: "2026-01",
+          monthEnd: "2026-03",
+          priorPercentage: 60,
+          carryOverFromQuarter: "I",
+          targetQuarter: "I",
+          isLockedCompleted: false,
+          lateStatus: "Terlambat",
           stage: "Sosialisasi dan pendampingan unit.",
           stageTargetTime: "Minggu ke-2 Mei 2026",
           realization: "Sudah dilaksanakan tahap awal.",
-          percentage: "100",
-          obstacle: "",
-          solution: "",
-          solutionTime: "",
+          percentage: "80",
+          obstacle: "Menunggu jadwal",
+          solution: "Koordinasi lanjutan",
+          solutionTime: "Juni 2026",
           notes: "",
-          evidence: "",
+          evidence: "https://drive.google.com/example",
         },
       ],
     },
   ])
 
-  assert.equal(
-    normalized[0].sasaranList[0].stageTargetTime,
-    "Minggu ke-2 Mei 2026",
-  )
+  const sas = normalized[0].sasaranList[0]
+  assert.equal(sas.strategicGoal, "SS-04 Transformasi Digital")
+  assert.equal(sas.priorPercentage, 60)
+  assert.equal(sas.carryOverFromQuarter, "I")
+  assert.equal(sas.lateStatus, "Terlambat")
+  assert.equal(sas.stageTargetTime, "Minggu ke-2 Mei 2026")
 
   const items = buildTriwulanItems(normalized)
-  assert.equal(items[3].label, "Tahap Pelaksanaan")
+  assert.equal(items[0].value, "SS-04 Transformasi Digital")
+  assert.equal(items[4].label, "Tahap Pelaksanaan")
   assert.equal(
-    items[3].value,
+    items[4].value,
     "Sosialisasi dan pendampingan unit.\nTarget/Waktu Selesai: Minggu ke-2 Mei 2026",
   )
 })
-

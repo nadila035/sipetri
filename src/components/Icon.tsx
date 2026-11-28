@@ -156,6 +156,19 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="m16 9-3 3 3 3" />
     </>
   ),
+  alert: (
+    <>
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" />
+      <path d="M12 9v4M12 17h.01" />
+    </>
+  ),
+  layers: (
+    <>
+      <path d="m12 2 10 5-10 5L2 7l10-5Z" />
+      <path d="m2 12 10 5 10-5" />
+      <path d="m2 17 10 5 10-5" />
+    </>
+  ),
 }
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {

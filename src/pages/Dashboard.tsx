@@ -1,32 +1,16 @@
 import { Icon } from "../components/Icon"
 import { getDeadlineCardModel, getPeriodState } from "../utils/workflow"
 import { extractDashboardAnnualMetrics } from "../utils/drafts"
-import { filterRecordsForSession } from "../utils/auth"
+import {
+  filterRecordsForSession,
+  getSessionLockedOrganization,
+} from "../utils/auth"
+import { getUnitAnnualPrerequisiteState } from "../utils/annualSources"
+import { collectLateTriwulanItems } from "../utils/lateMonitoring"
 import { useAuth } from "../AuthContext"
 import { useReporting } from "../ReportingContext"
 import "../dashboard.css"
 import type { ActionCardItem } from "../types"
-
-const actions: ActionCardItem[] = [
-  {
-    title: "Isi Laporan Triwulan",
-    description: "Catat realisasi, kendala, dan bukti dukung.",
-    icon: "report",
-    tone: "blue",
-  },
-  {
-    title: "Isi Sasaran Kinerja",
-    description: "Susun target tahunan dan jadwal program.",
-    icon: "target",
-    tone: "teal",
-  },
-  {
-    title: "Riwayat Dokumen",
-    description: "Pantau verifikasi, perbaiki revisi, dan unduh arsip.",
-    icon: "history",
-    tone: "violet",
-  },
-]
 
 type DashboardProps = {
   onSelectMenu: (label: string) => void
@@ -34,12 +18,81 @@ type DashboardProps = {
 }
 
 export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
-  const { data } = useReporting()
+  const { data, nowMs } = useReporting()
   const { session } = useAuth()
+  const lockedOrg = getSessionLockedOrganization(session)
   const unitRecords = filterRecordsForSession(data.records, session)
   const { year, quarter } = data
   const quarters = ["I", "II", "III", "IV"]
   const { currentPrograms } = extractDashboardAnnualMetrics(unitRecords, year)
+
+  const prereq = getUnitAnnualPrerequisiteState(
+    data.records,
+    year,
+    lockedOrg.subUnit,
+  )
+  const hasAnyApprovedAnnual = unitRecords.some(
+    (r) => r.type === "Sasaran Kinerja" && r.status === "Disetujui",
+  )
+  const triwulanUnlocked = prereq.canAccessTriwulan || hasAnyApprovedAnnual
+
+  const lateItems = collectLateTriwulanItems({
+    records: data.records,
+    periods: data.periods,
+    year,
+    activeQuarter: quarter,
+    sessionSubUnit: lockedOrg.subUnit,
+    nowMs,
+  })
+  const overduePendingCount = lateItems.filter(
+    (item) => item.lateStatus === "Terlambat",
+  ).length
+
+  const actions: (ActionCardItem & {
+    locked?: boolean
+    targetMenu: string
+    badge?: string
+  })[] = [
+    {
+      title: "Isi Sasaran Kinerja",
+      description:
+        prereq.status === "approved"
+          ? `Sasaran Kinerja ${year} telah disetujui (ACC) Admin PRP.`
+          : "Tahap 1 wajib: susun rencana kerja & sasaran tahunan unit.",
+      icon: "target",
+      tone: "teal",
+      targetMenu: "Isi Sasaran Kinerja",
+    },
+    {
+      title: "Isi Laporan Triwulan",
+      description: triwulanUnlocked
+        ? "Tahap 2: isi progres realisasi akumulatif, kendala, & evidence."
+        : `Terkunci otomatis hingga Sasaran Kinerja Tahun ${year} disetujui (ACC).`,
+      icon: triwulanUnlocked ? "report" : "lock",
+      tone: "blue",
+      locked: !triwulanUnlocked,
+      targetMenu: "Isi Laporan Triwulan",
+      badge: !triwulanUnlocked ? "Prasyarat RKA" : undefined,
+    },
+    {
+      title: "Monitoring Keterlambatan",
+      description:
+        overduePendingCount > 0
+          ? `${overduePendingCount} sasaran triwulan sebelumnya masih tertunggak (<100%).`
+          : "Pantau carry-over dan riwayat keterlambatan per periode triwulan.",
+      icon: "alert",
+      tone: "amber",
+      targetMenu: "Monitoring Keterlambatan",
+    },
+    {
+      title: "Riwayat Dokumen",
+      description: "Pantau status verifikasi, perbaiki revisi, dan unduh arsip.",
+      icon: "history",
+      tone: "violet",
+      targetMenu: "Riwayat",
+    },
+  ]
+
   const annualRecord = unitRecords.find(
     (record) =>
       record.type === "Sasaran Kinerja" &&
@@ -55,9 +108,11 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
   const documents = [
     {
       title: "Sasaran Kinerja Tahunan",
-      status: annualDraftRecord
-        ? "Draf / Sedang Diisi"
-        : (annualRecord?.status ?? "Belum Dimulai"),
+      status:
+        prereq.approvedRecord?.status ??
+        (annualDraftRecord
+          ? "Draf / Sedang Diisi"
+          : (annualRecord?.status ?? "Belum Dimulai")),
     },
     ...quarters.map((q) => {
       const hasDraft = unitRecords.some(
@@ -76,10 +131,12 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
         title: `Laporan Triwulan ${q}`,
         status: hasDraft
           ? "Draf / Sedang Diisi"
-          : (submitted?.status ?? "Belum Dimulai"),
+          : (submitted?.status ??
+            (prereq.canAccessTriwulan ? "Siap Diisi" : "Terkunci Prasyarat")),
       }
     }),
   ]
+
   const chart = quarters.map((q, index) => {
     const start = `${year}-${String(index * 3 + 1).padStart(2, "0")}`
     const end = `${year}-${String(index * 3 + 3).padStart(2, "0")}`
@@ -117,10 +174,16 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
     ...chart.flatMap((item) => [item.target, item.reported]),
   )
   const period = data.periods[`${year}-${quarter}`]
-  const periodState = getPeriodState(period)
-  const deadlineCard = getDeadlineCardModel(period)
-  const welcomeStatusNote =
-    periodState.status === "upcoming"
+  const periodState = getPeriodState(period, nowMs)
+  const deadlineCard = getDeadlineCardModel(period, nowMs)
+
+  const welcomeStatusNote = !prereq.canAccessTriwulan
+    ? prereq.status === "waiting"
+      ? `Sasaran Kinerja Tahun ${year} unit ${lockedOrg.unitLabel} sedang menunggu persetujuan (ACC) Admin PRP. Modul Laporan Triwulan akan terbuka dan terisi otomatis segera setelah disetujui.`
+      : prereq.status === "revision"
+        ? `Sasaran Kinerja Tahun ${year} memerlukan perbaikan revisi. Tuntaskan revisi agar Laporan Triwulan dapat dibuka otomatis.`
+        : `Langkah wajib tahap pertama: susun dan kirim Sasaran Kinerja Tahun ${year} untuk unit ${lockedOrg.unitLabel}. Setelah disetujui Admin PRP, data sasaran otomatis masuk ke Laporan Triwulan.`
+    : periodState.status === "upcoming"
       ? "Pengisian baru belum dimulai. Gunakan Riwayat untuk melihat dokumen sebelumnya."
       : periodState.status === "expired"
         ? "Tenggat pengiriman baru berakhir. Draf dan revisi tetap dapat dibuka."
@@ -129,7 +192,8 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
           ? "Pengiriman baru sedang ditutup oleh Admin PRP."
           : periodState.status === "invalid"
             ? "Rentang tanggal periode belum valid. Hubungi Admin PRP."
-            : `Periode pelaporan Triwulan ${quarter} sedang berjalan. Pastikan seluruh data kinerja telah terisi sebelum batas waktu.`
+            : `Sasaran Kinerja ${year} telah disetujui (ACC). Data program kerja otomatis siap dilaporkan pada Triwulan ${quarter}.`
+
   const revisionRecords = unitRecords.filter(
     (record) => record.status === "Revisi",
   )
@@ -158,18 +222,41 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
           .join(", ")}${
           revisionCount > 2 ? `, dan ${revisionCount - 2} dokumen lainnya` : ""
         } menunggu perbaikan.`
+
+  const primaryCtaLabel = !prereq.canAccessTriwulan
+    ? prereq.status === "waiting" || prereq.status === "revision"
+      ? "Pantau Sasaran Kinerja di Riwayat"
+      : "Susun Sasaran Kinerja Tahunan"
+    : "Lanjutkan Laporan Triwulan"
+
+  const handlePrimaryCta = () => {
+    if (!prereq.canAccessTriwulan) {
+      if (prereq.status === "revision") {
+        onOpenRevisions()
+      } else if (prereq.status === "waiting") {
+        onSelectMenu("Riwayat")
+      } else {
+        onSelectMenu("Isi Sasaran Kinerja")
+      }
+      return
+    }
+    onSelectMenu("Isi Laporan Triwulan")
+  }
+
   return (
     <>
       <section className="welcome">
         <div className="welcome-copy">
-          <div className="eyebrow">SELAMAT DATANG KEMBALI</div>
+          <div className="eyebrow">
+            UNIT TERKUNCI: {lockedOrg.unitLabel.toUpperCase()}
+          </div>
           <div className="welcome-title">
-            Halo, {session?.displayName ?? "Rekan Unit"}. Mari tuntaskan laporan
-            bagian Anda.
+            Halo, {session?.displayName ?? "Rekan Unit"}. Mari tuntaskan kinerja
+            unit Anda.
           </div>
           <p>{welcomeStatusNote}</p>
-          <button onClick={() => onSelectMenu("Isi Laporan Triwulan")}>
-            Lanjutkan pengisian <Icon name="arrow" size={18} />
+          <button type="button" onClick={handlePrimaryCta}>
+            {primaryCtaLabel} <Icon name="arrow" size={18} />
           </button>
         </div>
         <div className="deadline-card">
@@ -231,30 +318,39 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
       <section className="section">
         <div className="section-heading">
           <div>
-            <div className="section-title">Akses Cepat</div>
-            <p>Pintasan ke halaman pengisian dan arsip dokumen.</p>
+            <div className="section-title">Alur Kerja & Akses Cepat</div>
+            <p>
+              Urutan hierarkis: input Sasaran Kinerja terlebih dahulu, lalu
+              monitoring Laporan Triwulan terbuka otomatis pasca ACC Admin PRP.
+            </p>
           </div>
         </div>
         <div className="action-grid">
           {actions.map((action) => (
             <button
-              className="action-card"
+              type="button"
+              disabled={action.locked}
+              className={`action-card${action.locked ? " is-locked-card" : ""}`}
               key={action.title}
-              onClick={() =>
-                onSelectMenu(
-                  action.title === "Riwayat Dokumen" ? "Riwayat" : action.title,
-                )
-              }
+              onClick={() => {
+                if (action.locked) return
+                onSelectMenu(action.targetMenu)
+              }}
             >
               <span className={`action-icon ${action.tone}`}>
                 <Icon name={action.icon} size={24} />
               </span>
               <span className="action-copy">
-                <strong>{action.title}</strong>
+                <strong>
+                  {action.title}
+                  {action.badge && (
+                    <em className="action-lock-tag">{action.badge}</em>
+                  )}
+                </strong>
                 <span>{action.description}</span>
               </span>
               <span className="action-arrow">
-                <Icon name="arrow" size={18} />
+                <Icon name={action.locked ? "lock" : "arrow"} size={18} />
               </span>
             </button>
           ))}
@@ -266,13 +362,21 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
           <div className="panel-heading">
             <div>
               <div className="section-title">Status Dokumen {year}</div>
-              <p>Kelengkapan sasaran tahunan dan laporan triwulanan</p>
+              <p>Kelengkapan sasaran tahunan dan laporan triwulanan unit</p>
             </div>
             <button
+              type="button"
               className="text-button"
-              onClick={() => onSelectMenu("Isi Laporan Triwulan")}
+              onClick={() =>
+                onSelectMenu(
+                  triwulanUnlocked
+                    ? "Isi Laporan Triwulan"
+                    : "Isi Sasaran Kinerja",
+                )
+              }
             >
-              Isi laporan <Icon name="arrow" size={15} />
+              {triwulanUnlocked ? "Isi laporan" : "Isi sasaran"}{" "}
+              <Icon name="arrow" size={15} />
             </button>
           </div>
           <ol
@@ -297,7 +401,8 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
                   className={`document-badge ${
                     document.status === "Disetujui"
                       ? "approved"
-                      : document.status === "Belum Dimulai"
+                      : document.status === "Belum Dimulai" ||
+                          document.status === "Terkunci Prasyarat"
                         ? "not-started"
                         : document.status === "Revisi"
                           ? "revision"
@@ -385,7 +490,8 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
           </p>
           {totalTarget === 0 && (
             <p className="chart-note">
-              Belum ada target program kerja untuk tahun {year}.
+              Belum ada target program kerja terkirim untuk unit{" "}
+              {lockedOrg.subUnit || lockedOrg.unitLabel} pada tahun {year}.
             </p>
           )}
         </section>
@@ -394,7 +500,7 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
           <div className="panel-heading">
             <div>
               <div className="section-title">Aktivitas Terbaru</div>
-              <p>Dokumen yang baru saja dikirim</p>
+              <p>Dokumen unit yang baru saja dikirim</p>
             </div>
             <button
               type="button"
@@ -409,23 +515,24 @@ export function Dashboard({ onSelectMenu, onOpenRevisions }: DashboardProps) {
               .filter((record) => record.status !== "Draf")
               .slice(0, 3)
               .map((record) => (
-              <div className="activity-item" key={record.id}>
-                <span className="activity-icon blue">
-                  <Icon name="history" size={16} />
-                </span>
-                <div>
-                  <strong>{record.title}</strong>
-                  <p>
-                    {record.status} · {record.period}
-                  </p>
-                  <time>{record.sentAt}</time>
+                <div className="activity-item" key={record.id}>
+                  <span className="activity-icon blue">
+                    <Icon name="history" size={16} />
+                  </span>
+                  <div>
+                    <strong>{record.title}</strong>
+                    <p>
+                      {record.status} · {record.period}
+                    </p>
+                    <time>{record.sentAt}</time>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
             {!unitRecords.some((record) => record.status !== "Draf") && (
               <p>
-                Belum ada pengiriman. Isi laporan atau sasaran kinerja untuk
-                mengirim dokumen.
+                Belum ada dokumen terkirim untuk unit {lockedOrg.unitLabel}.
+                Mulai dari menu <strong>Isi Sasaran Kinerja</strong> untuk
+                membuka siklus pelaporan tahunan.
               </p>
             )}
           </div>
