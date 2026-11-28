@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { SetStateAction } from "react"
+import { AnimatePresence, motion } from "motion/react"
 import {
   compareQuarters,
   describePeriodLockReason,
@@ -29,7 +30,11 @@ import {
   promoteDraftToSubmitted,
   upsertDraftRecord,
 } from "../utils/drafts"
-import { formatBulanPelaksanaan } from "../utils/format"
+import {
+  computeTableMergeSpans,
+  formatBulanPelaksanaan,
+} from "../utils/format"
+import { exportRecordExcel } from "../utils/exportExcel"
 import {
   computeLateStatus,
   getUnitAnnualPrerequisiteState,
@@ -542,6 +547,11 @@ export function InputLaporanTriwulan({
       return true
     })
   }, [flatRows, gridFilter, searchQuery])
+
+  const filteredMergeSpans = useMemo(
+    () => computeTableMergeSpans(filteredRows),
+    [filteredRows],
+  )
 
   const counts = useMemo(() => {
     const locked = flatRows.filter((r) => r.sasaran.isLockedCompleted).length
@@ -1208,7 +1218,7 @@ export function InputLaporanTriwulan({
               </div>
             </div>
 
-            <div className="official-grid-scroll">
+            <div className="official-grid-scroll" data-lenis-prevent>
               <table className="triwulan-grid-table">
                 <thead>
                   <tr>
@@ -1273,7 +1283,8 @@ export function InputLaporanTriwulan({
                       </td>
                     </tr>
                   ) : (
-                    filteredRows.map((row) => {
+                    filteredRows.map((row, idx) => {
+                      const span = filteredMergeSpans[idx]
                       const s = row.sasaran
                       const isLocked = Boolean(s.isLockedCompleted)
                       const rowInvalid = attempted && !row.isComplete
@@ -1298,13 +1309,30 @@ export function InputLaporanTriwulan({
                             .join(" ")}
                           onClick={() => openRowModal(row)}
                         >
-                          <td className="col-no">{row.rowNumber}</td>
-                          <td className="col-goal">
-                            <strong>{row.strategicGoal}</strong>
-                          </td>
-                          <td className="col-program">
-                            <span>{row.programName}</span>
-                          </td>
+                          {span.noSpan > 0 && (
+                            <td
+                              className="col-no is-merged-cell"
+                              rowSpan={span.noSpan}
+                            >
+                              {span.groupNumber}
+                            </td>
+                          )}
+                          {span.goalSpan > 0 && (
+                            <td
+                              className="col-goal is-merged-cell"
+                              rowSpan={span.goalSpan}
+                            >
+                              <strong>{row.strategicGoal}</strong>
+                            </td>
+                          )}
+                          {span.programSpan > 0 && (
+                            <td
+                              className="col-program is-merged-cell"
+                              rowSpan={span.programSpan}
+                            >
+                              <span>{row.programName}</span>
+                            </td>
+                          )}
                           <td className="col-sasaran">
                             <span>{s.target || "-"}</span>
                           </td>
@@ -1470,39 +1498,51 @@ export function InputLaporanTriwulan({
         </>
       )}
 
-      {modalState && (
-        <div
-          className="submit-success-overlay triwulan-row-modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="triwulan-modal-title"
-        >
-          <div className="triwulan-row-modal is-wide">
-            <header className="triwulan-row-modal-head">
-              <div>
-                <span className="triwulan-modal-kicker">
-                  TRIWULAN {quarter} · {year} · {lockedOrg.unitLabel.toUpperCase()}
-                </span>
-                <h2 id="triwulan-modal-title">
-                  {modalState.isLockedCompleted
-                    ? "Detail Program Terkunci (Selesai 100%)"
-                    : "Pengisian Progres & Realisasi Program Kerja"}
-                </h2>
-              </div>
-              <button
-                type="button"
-                className="triwulan-modal-close"
-                aria-label="Tutup jendela pengisian"
-                onClick={() => {
-                  setModalState(null)
-                  setModalError("")
-                }}
-              >
-                ×
-              </button>
-            </header>
+      <AnimatePresence>
+        {modalState && (
+          <motion.div
+            className="submit-success-overlay triwulan-row-modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="triwulan-modal-title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            <motion.div
+              className="triwulan-row-modal is-wide"
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <header className="triwulan-row-modal-head">
+                <div>
+                  <span className="triwulan-modal-kicker">
+                    TRIWULAN {quarter} · {year} ·{" "}
+                    {lockedOrg.unitLabel.toUpperCase()}
+                  </span>
+                  <h2 id="triwulan-modal-title">
+                    {modalState.isLockedCompleted
+                      ? "Detail Program Terkunci (Selesai 100%)"
+                      : "Pengisian Progres & Realisasi Program Kerja"}
+                  </h2>
+                </div>
+                <button
+                  type="button"
+                  className="triwulan-modal-close"
+                  aria-label="Tutup jendela pengisian"
+                  onClick={() => {
+                    setModalState(null)
+                    setModalError("")
+                  }}
+                >
+                  ×
+                </button>
+              </header>
 
-            <div className="triwulan-row-modal-body">
+              <div className="triwulan-row-modal-body" data-lenis-prevent>
               <div className="inherited-rka-summary">
                 <div>
                   <span>Sasaran Strategis</span>
@@ -1855,23 +1895,25 @@ export function InputLaporanTriwulan({
                 </div>
               )}
             </footer>
-          </div>
-          <button
-            type="button"
-            className="overlay-close"
-            aria-label="Tutup jendela pengisian"
-            onClick={() => {
-              setModalState(null)
-              setModalError("")
-            }}
-          />
-        </div>
-      )}
+            </motion.div>
+            <button
+              type="button"
+              className="overlay-close"
+              aria-label="Tutup jendela pengisian"
+              onClick={() => {
+                setModalState(null)
+                setModalError("")
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <DetailModal
         record={previewRecord}
         isDraftPreview
         onClose={() => setPreviewOpen(false)}
+        onExportExcel={(rec) => notify(exportRecordExcel(rec))}
         onPrintPreview={(rec) => {
           setPreviewOpen(false)
           setPrintPreviewRecord(rec)

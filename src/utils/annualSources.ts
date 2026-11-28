@@ -234,12 +234,15 @@ export function importAnnualSources(
 
     existing.add(key)
 
-    let program = result.find((p) =>
-      p.sasaranList.some(
-        (s) =>
-          s.annualSource?.recordId === source.recordId &&
-          s.annualSource.programId === source.programId,
-      ),
+    const sourceGoalNorm = (source.strategicGoal ?? "").trim().toLowerCase()
+    let program = result.find(
+      (p) =>
+        (p.strategicGoal ?? "").trim().toLowerCase() === sourceGoalNorm &&
+        p.sasaranList.some(
+          (s) =>
+            s.annualSource?.recordId === source.recordId &&
+            s.annualSource.programId === source.programId,
+        ),
     )
 
     if (!program) {

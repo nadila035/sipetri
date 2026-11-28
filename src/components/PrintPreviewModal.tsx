@@ -1,8 +1,11 @@
 import { useDialog } from "../utils/useDialog"
 import { Icon } from "./Icon"
 import type { HistoryRecord } from "../types"
-import { formatBulanPelaksanaan, getTriwulanData } from "../utils/format"
-import { getSasaranKinerjaReviewCriteria } from "../utils/review"
+import {
+  computeTableMergeSpans,
+  getSasaranKinerjaDisplayRows,
+  getTriwulanDisplayRows,
+} from "../utils/format"
 
 function formatPrintText(value?: string | null): string {
   const trimmed = value?.trim() ?? ""
@@ -76,7 +79,7 @@ export function PrintPreviewModal({
           )}
         </div>
       </div>
-      <div className="print-canvas">
+      <div className="print-canvas" data-lenis-prevent>
         <article className="print-sheet">
           <header className="letterhead">
             <div
@@ -166,14 +169,14 @@ export function PrintPreviewModal({
 
           {record.type === "Sasaran Kinerja" ? (
             (() => {
-              const criteriaSlots = getSasaranKinerjaReviewCriteria(record)
-              let rowCounter = 0
+              const displayRows = getSasaranKinerjaDisplayRows(record)
+              const spans = computeTableMergeSpans(displayRows)
               return (
                 <table className="official-report-table target-official-table sasaran-green-print-table">
                   <colgroup>
-                    <col style={{ width: "44px" }} />
-                    <col style={{ width: "22%" }} />
-                    <col style={{ width: "22%" }} />
+                    <col style={{ width: "4.5%" }} />
+                    <col style={{ width: "22.5%" }} />
+                    <col style={{ width: "21%" }} />
                     <col style={{ width: "24%" }} />
                     <col style={{ width: "14%" }} />
                     <col style={{ width: "14%" }} />
@@ -191,136 +194,102 @@ export function PrintPreviewModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {criteriaSlots.map((crit) =>
-                      crit.stratSlots.map((strat) => {
-                        const totalStratRows = strat.programSlots.reduce(
-                          (acc, p) =>
-                            acc + Math.max(1, p.sasaranSlots.length),
-                          0,
-                        )
-                        const stratText = formatPrintText(
-                          strat.name || crit.name,
-                        )
+                    {displayRows.map((row, idx) => {
+                      const span = spans[idx]
+                      const stratText = formatPrintText(row.strategicGoal)
+                      const progText = formatPrintText(row.programName)
+                      const sasText = formatPrintText(row.sasaran)
+                      const bulanText = formatPrintText(row.bulanFormatted)
+                      const notesText = formatPrintText(row.keterangan)
 
-                        return strat.programSlots.map((prog, pIdx) => {
-                          const progText = formatPrintText(prog.name)
-                          const sList = prog.sasaranSlots.length
-                            ? prog.sasaranSlots
-                            : [
-                                {
-                                  id: `${prog.id}-empty`,
-                                  sasaran: "-",
-                                  bulanMulai: "-",
-                                  bulanSelesai: "",
-                                  keterangan: "-",
-                                  sasaranItemIdx: -1,
-                                  bulanItemIdx: -1,
-                                  keteranganItemIdx: -1,
-                                },
-                              ]
-                          const progRows = sList.length
-
-                          return sList.map((sas, sasIdx) => {
-                            rowCounter += 1
-                            const isFirstSasOfProg = sasIdx === 0
-                            const isFirstProgOfStrat =
-                              pIdx === 0 && isFirstSasOfProg
-
-                            const sasText = formatPrintText(sas.sasaran)
-                            const notesText = formatPrintText(sas.keterangan)
-                            const bulanText = formatPrintText(
-                              formatBulanPelaksanaan(
-                                sas.bulanMulai,
-                                sas.bulanSelesai,
-                              ),
-                            )
-
-                            return (
-                              <tr key={`${prog.id}-${sas.id}`}>
-                                <td
-                                  style={{
-                                    textAlign: "center",
-                                    verticalAlign: "top",
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  {rowCounter}
-                                </td>
-                                {isFirstProgOfStrat && (
-                                  <td
-                                    rowSpan={totalStratRows}
-                                    style={{
-                                      textAlign: textCellAlign(stratText),
-                                      verticalAlign: "top",
-                                    }}
-                                  >
-                                    {stratText}
-                                  </td>
-                                )}
-                                {isFirstSasOfProg && (
-                                  <td
-                                    rowSpan={progRows}
-                                    style={{
-                                      textAlign: textCellAlign(progText),
-                                      verticalAlign: "top",
-                                    }}
-                                  >
-                                    {progText}
-                                  </td>
-                                )}
-                                <td
-                                  style={{
-                                    textAlign: textCellAlign(sasText),
-                                    verticalAlign: "top",
-                                  }}
-                                >
-                                  {sasText}
-                                </td>
-                                <td
-                                  style={{
-                                    textAlign: "center",
-                                    verticalAlign: "top",
-                                  }}
-                                >
-                                  {bulanText}
-                                </td>
-                                <td
-                                  style={{
-                                    textAlign: textCellAlign(notesText),
-                                    verticalAlign: "top",
-                                  }}
-                                >
-                                  {notesText}
-                                </td>
-                              </tr>
-                            )
-                          })
-                        })
-                      }),
-                    )}
+                      return (
+                        <tr key={row.key}>
+                          {span.noSpan > 0 && (
+                            <td
+                              rowSpan={span.noSpan}
+                              style={{
+                                textAlign: "center",
+                                verticalAlign: "top",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {span.groupNumber}
+                            </td>
+                          )}
+                          {span.goalSpan > 0 && (
+                            <td
+                              rowSpan={span.goalSpan}
+                              style={{
+                                textAlign: textCellAlign(stratText),
+                                verticalAlign: "top",
+                                fontWeight: stratText === "-" ? 400 : 700,
+                              }}
+                            >
+                              {stratText}
+                            </td>
+                          )}
+                          {span.programSpan > 0 && (
+                            <td
+                              rowSpan={span.programSpan}
+                              style={{
+                                textAlign: textCellAlign(progText),
+                                verticalAlign: "top",
+                              }}
+                            >
+                              {progText}
+                            </td>
+                          )}
+                          <td
+                            style={{
+                              textAlign: textCellAlign(sasText),
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {sasText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: "center",
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {bulanText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: textCellAlign(notesText),
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {notesText}
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               )
             })()
           ) : (
             (() => {
-              let rowCounter = 0
+              const displayRows = getTriwulanDisplayRows(record)
+              const spans = computeTableMergeSpans(displayRows)
               return (
                 <table className="official-report-table triwulan-official-table triwulan-color-print-table">
                   <colgroup>
-                    <col style={{ width: "3%" }} />
-                    <col style={{ width: "9%" }} />
-                    <col style={{ width: "9%" }} />
-                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "3.2%" }} />
+                    <col style={{ width: "10.3%" }} />
+                    <col style={{ width: "9.5%" }} />
+                    <col style={{ width: "9.5%" }} />
+                    <col style={{ width: "7.5%" }} />
+                    <col style={{ width: "9.5%" }} />
+                    <col style={{ width: "9.5%" }} />
+                    <col style={{ width: "5.5%" }} />
                     <col style={{ width: "8%" }} />
-                    <col style={{ width: "9%" }} />
-                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "8.5%" }} />
+                    <col style={{ width: "6.5%" }} />
+                    <col style={{ width: "6.5%" }} />
                     <col style={{ width: "6%" }} />
-                    <col style={{ width: "8%" }} />
-                    <col style={{ width: "8%" }} />
-                    <col style={{ width: "7%" }} />
-                    <col style={{ width: "8%" }} />
-                    <col style={{ width: "7%" }} />
                   </colgroup>
                   <thead>
                     <tr>
@@ -356,150 +325,149 @@ export function PrintPreviewModal({
                     </tr>
                   </thead>
                   <tbody>
-                    {getTriwulanData(record).map((prog) => {
-                      const totalSasRows = Math.max(1, prog.sasaranList.length)
-                      return prog.sasaranList.map((sas, sIdx) => {
-                        rowCounter += 1
-                        const isFirstSas = sIdx === 0
-                        const goalText = formatPrintText(prog.strategicGoal)
-                        const programText = formatPrintText(prog.program)
-                        const targetText = formatPrintText(sas.target)
-                        const monthText = formatPrintText(sas.month)
-                        const stageText = formatPrintText(sas.stage)
-                        const realizationText = formatPrintText(sas.realization)
-                        const percentageText = formatPrintText(sas.percentage)
-                        const obstacleText = formatPrintText(sas.obstacle)
-                        const solutionText = formatPrintText(sas.solution)
-                        const solutionTimeText = formatPrintText(
-                          sas.solutionTime,
-                        )
-                        const baseNotes = formatPrintText(sas.notes)
-                        const notesText =
-                          sas.lateStatus && sas.lateStatus !== "Tepat Waktu"
-                            ? baseNotes === "-"
-                              ? `[${sas.lateStatus}]`
-                              : `[${sas.lateStatus}] ${baseNotes}`
-                            : baseNotes
-                        const evidenceText = formatPrintText(sas.evidence)
+                    {displayRows.map((row, idx) => {
+                      const span = spans[idx]
+                      const sas = row.sasaran
+                      const goalText = formatPrintText(row.strategicGoal)
+                      const programText = formatPrintText(row.programName)
+                      const targetText = formatPrintText(sas.target)
+                      const monthText = formatPrintText(sas.month)
+                      const stageText = formatPrintText(sas.stage)
+                      const realizationText = formatPrintText(sas.realization)
+                      const percentageText = formatPrintText(sas.percentage)
+                      const obstacleText = formatPrintText(sas.obstacle)
+                      const solutionText = formatPrintText(sas.solution)
+                      const solutionTimeText = formatPrintText(sas.solutionTime)
+                      const baseNotes = formatPrintText(sas.notes)
+                      const notesText =
+                        sas.lateStatus && sas.lateStatus !== "Tepat Waktu"
+                          ? baseNotes === "-"
+                            ? `[${sas.lateStatus}]`
+                            : `[${sas.lateStatus}] ${baseNotes}`
+                          : baseNotes
+                      const evidenceText = formatPrintText(sas.evidence)
 
-                        return (
-                          <tr key={`${prog.id}-${sas.id || sIdx}`}>
+                      return (
+                        <tr key={row.key}>
+                          {span.noSpan > 0 && (
                             <td
+                              rowSpan={span.noSpan}
                               style={{
                                 textAlign: "center",
                                 verticalAlign: "top",
                                 fontWeight: 700,
                               }}
                             >
-                              {rowCounter}
+                              {span.groupNumber}
                             </td>
-                            {isFirstSas && (
-                              <>
-                                <td
-                                  rowSpan={totalSasRows}
-                                  style={{
-                                    textAlign: textCellAlign(goalText),
-                                    verticalAlign: "top",
-                                  }}
-                                >
-                                  {goalText}
-                                </td>
-                                <td
-                                  rowSpan={totalSasRows}
-                                  style={{
-                                    textAlign: textCellAlign(programText),
-                                    verticalAlign: "top",
-                                  }}
-                                >
-                                  {programText}
-                                </td>
-                              </>
-                            )}
+                          )}
+                          {span.goalSpan > 0 && (
                             <td
+                              rowSpan={span.goalSpan}
                               style={{
-                                textAlign: textCellAlign(targetText),
+                                textAlign: textCellAlign(goalText),
+                                verticalAlign: "top",
+                                fontWeight: goalText === "-" ? 400 : 700,
+                              }}
+                            >
+                              {goalText}
+                            </td>
+                          )}
+                          {span.programSpan > 0 && (
+                            <td
+                              rowSpan={span.programSpan}
+                              style={{
+                                textAlign: textCellAlign(programText),
                                 verticalAlign: "top",
                               }}
                             >
-                              {targetText}
+                              {programText}
                             </td>
-                            <td
-                              style={{
-                                textAlign: "center",
-                                verticalAlign: "top",
-                              }}
-                            >
-                              {monthText}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: textCellAlign(stageText),
-                                verticalAlign: "top",
-                              }}
-                            >
-                              {stageText}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: textCellAlign(realizationText),
-                                verticalAlign: "top",
-                              }}
-                            >
-                              {realizationText}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: "center",
-                                verticalAlign: "top",
-                                fontWeight: 700,
-                              }}
-                            >
-                              {percentageText}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: textCellAlign(obstacleText),
-                                verticalAlign: "top",
-                              }}
-                            >
-                              {obstacleText}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: textCellAlign(solutionText),
-                                verticalAlign: "top",
-                              }}
-                            >
-                              {solutionText}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: "center",
-                                verticalAlign: "top",
-                              }}
-                            >
-                              {solutionTimeText}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: textCellAlign(notesText),
-                                verticalAlign: "top",
-                              }}
-                            >
-                              {notesText}
-                            </td>
-                            <td
-                              style={{
-                                textAlign: textCellAlign(evidenceText),
-                                verticalAlign: "top",
-                                wordBreak: "break-all",
-                              }}
-                            >
-                              {evidenceText}
-                            </td>
-                          </tr>
-                        )
-                      })
+                          )}
+                          <td
+                            style={{
+                              textAlign: textCellAlign(targetText),
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {targetText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: "center",
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {monthText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: textCellAlign(stageText),
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {stageText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: textCellAlign(realizationText),
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {realizationText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: "center",
+                              verticalAlign: "top",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {percentageText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: textCellAlign(obstacleText),
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {obstacleText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: textCellAlign(solutionText),
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {solutionText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: "center",
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {solutionTimeText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: textCellAlign(notesText),
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {notesText}
+                          </td>
+                          <td
+                            style={{
+                              textAlign: textCellAlign(evidenceText),
+                              verticalAlign: "top",
+                              wordBreak: "break-all",
+                            }}
+                          >
+                            {evidenceText}
+                          </td>
+                        </tr>
+                      )
                     })}
                   </tbody>
                 </table>

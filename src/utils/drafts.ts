@@ -389,6 +389,179 @@ export function calculateSasaranKinerjaCompleteness(
   return total > 0 ? Math.round((completed / total) * 100) : 0
 }
 
+export type FlatSasaranInputRow = {
+  criteriaId?: string
+  strategyId?: string
+  strategicGoalId: string
+  strategicGoal: string
+  programId?: string
+  programName: string
+  sasaranId: string
+  sasaranText: string
+  bulanMulai: string
+  bulanSelesai: string
+  keterangan: string
+}
+
+export function extractFlatSasaranRows(
+  criteria: CriteriaItem[],
+): FlatSasaranInputRow[] {
+  const rows: FlatSasaranInputRow[] = []
+  for (const crit of criteria) {
+    const strategies = getStrategies(crit)
+    for (const strat of strategies) {
+      const goalName = strat.name.trim() || crit.name.trim()
+      for (const prog of strat.programs) {
+        const sList = getProgramSasaran(prog)
+        for (const sas of sList) {
+          const hasAnyField = Boolean(
+            goalName ||
+              prog.name.trim() ||
+              sas.sasaran.trim() ||
+              sas.bulan_mulai.trim() ||
+              (sas.bulan_selesai ?? "").trim() ||
+              sas.keterangan.trim(),
+          )
+          if (!hasAnyField && criteria.length === 1 && rows.length === 0) {
+            continue
+          }
+          rows.push({
+            criteriaId: crit.id,
+            strategyId: strat.id,
+            strategicGoalId: strat.strategicGoalId ?? "",
+            strategicGoal: goalName,
+            programId: prog.id,
+            programName: prog.name,
+            sasaranId: sas.id,
+            sasaranText: sas.sasaran,
+            bulanMulai: sas.bulan_mulai,
+            bulanSelesai: sas.bulan_selesai ?? "",
+            keterangan: sas.keterangan,
+          })
+        }
+      }
+    }
+  }
+  return rows
+}
+
+export function rebuildCriteriaFromFlatRows(
+  rows: FlatSasaranInputRow[],
+): CriteriaItem[] {
+  if (rows.length === 0) return []
+
+  const usedCriteriaIds = new Set<string>()
+  const usedStrategyIds = new Set<string>()
+  const usedProgramIds = new Set<string>()
+  const usedSasaranIds = new Set<string>()
+
+  const claimId = (
+    preferred: string | undefined,
+    used: Set<string>,
+    prefix: string,
+  ): string => {
+    const clean = preferred?.trim() ?? ""
+    if (clean && !used.has(clean)) {
+      used.add(clean)
+      return clean
+    }
+    let next = makeId(prefix)
+    while (used.has(next)) {
+      next = makeId(prefix)
+    }
+    used.add(next)
+    return next
+  }
+
+  const normKey = (val: string) => val.trim().replace(/\s+/g, " ").toLowerCase()
+  const criteriaOut: CriteriaItem[] = []
+
+  let cursor = 0
+  while (cursor < rows.length) {
+    const firstGoalRow = rows[cursor]
+    const goalKey = normKey(firstGoalRow.strategicGoal)
+    let goalEnd = cursor
+    if (goalKey) {
+      while (
+        goalEnd + 1 < rows.length &&
+        normKey(rows[goalEnd + 1].strategicGoal) === goalKey
+      ) {
+        goalEnd += 1
+      }
+    }
+
+    const programsOut: WorkProgram[] = []
+    let pCursor = cursor
+    while (pCursor <= goalEnd) {
+      const firstProgRow = rows[pCursor]
+      const progKey = normKey(firstProgRow.programName)
+      let progEnd = pCursor
+      if (progKey) {
+        while (
+          progEnd + 1 <= goalEnd &&
+          normKey(rows[progEnd + 1].programName) === progKey
+        ) {
+          progEnd += 1
+        }
+      }
+
+      const sasaranList: SasaranItem[] = []
+      for (let sIdx = pCursor; sIdx <= progEnd; sIdx++) {
+        const r = rows[sIdx]
+        const sId = claimId(r.sasaranId, usedSasaranIds, "sasaran")
+        const sasText = r.sasaranText
+        const bMulai = r.bulanMulai
+        const bSelesai = r.bulanSelesai
+        const ket = r.keterangan
+        sasaranList.push({
+          id: sId,
+          sasaran: sasText,
+          bulan_mulai: bMulai,
+          bulan_selesai: bSelesai,
+          keterangan: ket,
+          target: sasText,
+          monthStart: bMulai,
+          monthEnd: bSelesai,
+          notes: ket,
+        })
+      }
+
+      programsOut.push({
+        id: claimId(firstProgRow.programId, usedProgramIds, "program"),
+        name: firstProgRow.programName,
+        sasaranList,
+        targets: sasaranList.map((s) => ({
+          id: s.id,
+          target: s.sasaran,
+          monthStart: s.bulan_mulai,
+          monthEnd: s.bulan_selesai,
+          notes: s.keterangan,
+        })),
+      })
+
+      pCursor = progEnd + 1
+    }
+
+    const strat: StrategyItem = {
+      id: claimId(firstGoalRow.strategyId, usedStrategyIds, "strategy"),
+      strategicGoalId: firstGoalRow.strategicGoalId,
+      name: firstGoalRow.strategicGoal,
+      programs: programsOut,
+    }
+
+    criteriaOut.push({
+      id: claimId(firstGoalRow.criteriaId, usedCriteriaIds, "criteria"),
+      name: firstGoalRow.strategicGoal,
+      strategy: strat,
+      strategies: [strat],
+    })
+
+    cursor = goalEnd + 1
+  }
+
+  return criteriaOut
+}
+
 export function buildSasaranKinerjaItems(
   criteria: CriteriaItem[],
 ): HistoryItem[] {

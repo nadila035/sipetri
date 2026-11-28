@@ -1,20 +1,14 @@
 import type { HistoryRecord } from "../types/index.ts"
-import { formatBulanPelaksanaan, getTriwulanData } from "./format.ts"
+import {
+  computeTableMergeSpans,
+  getSasaranKinerjaDisplayRows,
+  getTriwulanDisplayRows,
+} from "./format.ts"
 import {
   parseSentAtTimestamp,
   reportingUnits,
   resolveOrganization,
 } from "./organizations.ts"
-
-function toCsv(rows: (string | number)[][]): string {
-  return rows
-    .map((row) =>
-      row
-        .map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`)
-        .join(","),
-    )
-    .join("\n")
-}
 
 function triggerBlobDownload(filename: string, blob: Blob) {
   if (typeof document === "undefined") return
@@ -26,23 +20,17 @@ function triggerBlobDownload(filename: string, blob: Blob) {
   URL.revokeObjectURL(url)
 }
 
-function triggerCsvDownload(filename: string, rows: (string | number)[][]) {
-  const csv = toCsv(rows)
-  triggerBlobDownload(
-    filename,
-    new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8" }),
-  )
-}
-
 export function buildRecordRows(record: HistoryRecord): (string | number)[][] {
   if (record.type === "Sasaran Kinerja") {
+    const displayRows = getSasaranKinerjaDisplayRows(record)
+    const spans = computeTableMergeSpans(displayRows)
     const rows: (string | number)[][] = [
-      ["MATRIKS SASARAN KINERJA DAN PROGRAM KERJA"],
-      ["ID Dokumen", record.id],
-      ["Unit / Bagian", record.unit],
-      ["Periode", record.period],
-      ["Tanggal Kirim", record.sentAt],
-      ["Status", record.status],
+      ["SASARAN KINERJA INSTITUT TEKNOLOGI PLN", "", "", "", "", ""],
+      ["ID Dokumen", record.id, "", "", "", ""],
+      ["Unit / Bagian", record.unit, "", "", "", ""],
+      ["Periode", record.period, "", "", "", ""],
+      ["Tanggal Kirim", record.sentAt, "", "", "", ""],
+      ["Status", record.status, "", "", "", ""],
       [],
       [
         "No",
@@ -54,76 +42,33 @@ export function buildRecordRows(record: HistoryRecord): (string | number)[][] {
       ],
     ]
 
-    let rowNo = 0
-    if (record.criteriaData && record.criteriaData.length > 0) {
-      record.criteriaData.forEach((crit) => {
-        const strats =
-          crit.strategies && crit.strategies.length > 0
-            ? crit.strategies
-            : crit.strategy
-              ? [crit.strategy]
-              : []
-
-        strats.forEach((strat) => {
-          const stratName = strat.name || crit.name || "-"
-          strat.programs.forEach((prog) => {
-            const sList =
-              prog.sasaranList && prog.sasaranList.length > 0
-                ? prog.sasaranList
-                : prog.targets.map((t) => ({
-                    sasaran: t.sasaran ?? t.target ?? "",
-                    bulan_mulai: t.bulan_mulai ?? t.monthStart ?? "",
-                    bulan_selesai: t.bulan_selesai ?? t.monthEnd ?? "",
-                    keterangan: t.keterangan ?? t.notes ?? "",
-                  }))
-
-            sList.forEach((sas) => {
-              rowNo += 1
-              const bulanCell = formatBulanPelaksanaan(
-                sas.bulan_mulai,
-                sas.bulan_selesai,
-              )
-
-              rows.push([
-                rowNo,
-                stratName,
-                prog.name || "-",
-                sas.sasaran || "-",
-                bulanCell,
-                sas.keterangan || "-",
-              ])
-            })
-          })
-        })
-      })
-    } else {
-      const getVal = (lbl: string) =>
-        record.items.find((i) =>
-          i.label.toLowerCase().includes(lbl.toLowerCase()),
-        )?.value ?? "-"
+    displayRows.forEach((row, idx) => {
+      const span = spans[idx]
       rows.push([
-        1,
-        getVal("Strategi"),
-        getVal("Program"),
-        getVal("Sasaran"),
-        getVal("Bulan"),
-        getVal("Keterangan"),
+        span.noSpan > 0 ? span.groupNumber : "",
+        span.goalSpan > 0 ? row.strategicGoal : "",
+        span.programSpan > 0 ? row.programName : "",
+        row.sasaran,
+        row.bulanFormatted,
+        row.keterangan,
       ])
-    }
+    })
 
     return rows
   }
 
-  const triwulanPrograms = getTriwulanData(record)
+  const displayRows = getTriwulanDisplayRows(record)
+  const spans = computeTableMergeSpans(displayRows)
   const docYear = record.period.match(/\b(\d{4})\b/)?.[1] ?? "2026"
+  const emptyTail = Array.from({ length: 11 }, () => "")
   const rows: (string | number)[][] = [
-    ["LAPORAN KINERJA TRIWULAN"],
-    ["ID Dokumen", record.id],
-    ["Unit / Bagian", record.unit],
-    ["Penanggung Jawab", record.author || "-"],
-    ["Periode", record.period],
-    ["Tanggal Kirim", record.sentAt],
-    ["Status", record.status],
+    ["LAPORAN KINERJA TRIWULAN INSTITUT TEKNOLOGI PLN", "", ...emptyTail],
+    ["ID Dokumen", record.id, ...emptyTail],
+    ["Unit / Bagian", record.unit, ...emptyTail],
+    ["Penanggung Jawab", record.author || "-", ...emptyTail],
+    ["Periode", record.period, ...emptyTail],
+    ["Tanggal Kirim", record.sentAt, ...emptyTail],
+    ["Status", record.status, ...emptyTail],
     [],
     [
       "No",
@@ -142,43 +87,35 @@ export function buildRecordRows(record: HistoryRecord): (string | number)[][] {
     ],
   ]
 
-  let rowNo = 0
-  triwulanPrograms.forEach((prog) => {
-    prog.sasaranList.forEach((sas) => {
-      rowNo += 1
-      const ketWithLate =
-        sas.lateStatus && sas.lateStatus !== "Tepat Waktu"
-          ? `[${sas.lateStatus}] ${sas.notes}`
-          : sas.notes
-      rows.push([
-        rowNo,
-        sas.strategicGoal || prog.strategicGoal,
-        prog.program,
-        sas.target,
-        sas.month,
-        sas.stage,
-        sas.realization,
-        sas.percentage,
-        sas.obstacle,
-        sas.solution,
-        sas.solutionTime,
-        ketWithLate,
-        sas.evidence,
-      ])
-    })
+  displayRows.forEach((row, idx) => {
+    const span = spans[idx]
+    const sas = row.sasaran
+    const baseNotes = sas.notes && sas.notes !== "-" ? sas.notes : "-"
+    const ketWithLate =
+      sas.lateStatus && sas.lateStatus !== "Tepat Waktu"
+        ? baseNotes === "-"
+          ? `[${sas.lateStatus}]`
+          : `[${sas.lateStatus}] ${baseNotes}`
+        : baseNotes
+
+    rows.push([
+      span.noSpan > 0 ? span.groupNumber : "",
+      span.goalSpan > 0 ? row.strategicGoal : "",
+      span.programSpan > 0 ? row.programName : "",
+      sas.target,
+      sas.month,
+      sas.stage,
+      sas.realization,
+      sas.percentage,
+      sas.obstacle,
+      sas.solution,
+      sas.solutionTime,
+      ketWithLate,
+      sas.evidence,
+    ])
   })
 
   return rows
-}
-
-export function exportRecordExcel(record: HistoryRecord): string {
-  const rows = buildRecordRows(record)
-  if (record.type === "Sasaran Kinerja") {
-    triggerCsvDownload(`${record.id}_Sasaran_Kinerja.csv`, rows)
-    return "File Excel Sasaran Kinerja (6 Kolom) berhasil diunduh."
-  }
-  triggerCsvDownload(`${record.id}_Laporan_Triwulan.csv`, rows)
-  return "File Excel Laporan Triwulan (13 Kolom) berhasil diunduh."
 }
 
 function buildSummaryIndexRows(
@@ -187,14 +124,59 @@ function buildSummaryIndexRows(
   quarterFilter: string,
 ): (string | number)[][] {
   return [
-    ["RINGKASAN DAFTAR DOKUMEN ARSIP SIPETRI ITPLN"],
-    ["Filter Tahun", yearFilter || "Semua Tahun"],
+    [
+      "RINGKASAN DAFTAR DOKUMEN ARSIP SIPETRI ITPLN",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
+    [
+      "Filter Tahun",
+      yearFilter || "Semua Tahun",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
     [
       "Filter Triwulan",
       quarterFilter ? `Triwulan ${quarterFilter}` : "Semua Periode",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
     ],
-    ["Jumlah Dokumen", records.length],
-    ["Tanggal Unduh", new Date().toLocaleString("id-ID")],
+    ["Jumlah Dokumen", records.length, "", "", "", "", "", "", "", "", ""],
+    [
+      "Tanggal Unduh",
+      new Date().toLocaleString("id-ID"),
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
     [],
     [
       "NO",
@@ -226,21 +208,6 @@ function buildSummaryIndexRows(
       ]
     }),
   ]
-}
-
-export function exportArchiveRecapExcel(
-  records: HistoryRecord[],
-  yearFilter: string,
-  quarterFilter: string,
-): string {
-  const yearLabel = yearFilter || "Semua_Tahun"
-  const quarterLabel = quarterFilter ? `_TW_${quarterFilter}` : ""
-  const rows = buildSummaryIndexRows(records, yearFilter, quarterFilter)
-  triggerCsvDownload(
-    `Ringkasan_Dokumen_SIPETRI_${yearLabel}${quarterLabel}.csv`,
-    rows,
-  )
-  return `Ringkasan Daftar Dokumen (${records.length} dokumen, .csv) berhasil diunduh.`
 }
 
 // CRC32 lookup table for standard PKZIP uncompressed archive entries.
@@ -375,17 +342,102 @@ function excelColumnName(colIndexZero: number): string {
   return label
 }
 
+const STYLE = {
+  PLAIN: 0,
+  TITLE_BANNER: 1,
+  HEADER_SLATE: 2,
+  BODY_LEFT: 3,
+  BODY_CENTER: 4,
+  HEADER_FULL_GREEN: 5,
+  HEADER_SKY_BLUE: 6,
+  HEADER_SOFT_PINK: 7,
+  HEADER_SOFT_GREEN: 8,
+  HEADER_BRIGHT_YELLOW: 9,
+  META_LABEL: 10,
+  META_VALUE: 11,
+  BODY_MERGED_BOLD: 12,
+} as const
+
 type XlsxSheetSpec = {
   name: string
   rows: (string | number)[][]
   headerRowIndexes?: number[]
   titleRowIndexes?: number[]
+  metaRowIndexes?: number[]
   colWidths?: number[]
+  merges?: string[]
+  cellStyles?: Record<string, number>
+  rowHeights?: Record<number, number>
 }
+
+const WORKBOOK_STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="8">
+    <font><sz val="10"/><color rgb="FF17213A"/><name val="Calibri"/></font>
+    <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF162A52"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF0B190E"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF0F1E36"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF281120"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF0D2211"/><name val="Calibri"/></font>
+    <font><b/><sz val="10"/><color rgb="FF1C1900"/><name val="Calibri"/></font>
+  </fonts>
+  <fills count="10">
+    <fill><patternFill patternType="none"/></fill>
+    <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF162A52"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEAF0F7"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF4ED64E"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF9ED9F7"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF7D4EA"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF93E38D"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFF212"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF8FAFC"/></patternFill></fill>
+  </fills>
+  <borders count="3">
+    <border><left/><right/><top/><bottom/><diagonal/></border>
+    <border>
+      <left style="thin"><color rgb="FF64748B"/></left>
+      <right style="thin"><color rgb="FF64748B"/></right>
+      <top style="thin"><color rgb="FF64748B"/></top>
+      <bottom style="thin"><color rgb="FF64748B"/></bottom>
+      <diagonal/>
+    </border>
+    <border>
+      <left style="thin"><color rgb="FF1E293B"/></left>
+      <right style="thin"><color rgb="FF1E293B"/></right>
+      <top style="thin"><color rgb="FF1E293B"/></top>
+      <bottom style="thin"><color rgb="FF1E293B"/></bottom>
+      <diagonal/>
+    </border>
+  </borders>
+  <cellStyleXfs count="1">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
+  </cellStyleXfs>
+  <cellXfs count="13">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="3" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="top" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="3" fillId="4" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="5" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="5" fillId="6" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="6" fillId="7" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="7" fillId="8" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="9" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="top" wrapText="1"/></xf>
+  </cellXfs>
+</styleSheet>`
 
 function buildWorksheetXml(sheet: XlsxSheetSpec): string {
   const headerSet = new Set(sheet.headerRowIndexes ?? [])
   const titleSet = new Set(sheet.titleRowIndexes ?? [0])
+  const metaSet = new Set(sheet.metaRowIndexes ?? [])
+  const cellStyles = sheet.cellStyles ?? {}
+  const rowHeights = sheet.rowHeights ?? {}
+
   const colsXml =
     sheet.colWidths && sheet.colWidths.length > 0
       ? `<cols>${sheet.colWidths
@@ -399,10 +451,36 @@ function buildWorksheetXml(sheet: XlsxSheetSpec): string {
   const rowsXml = sheet.rows
     .map((row, rIdx) => {
       const rowNumber = rIdx + 1
-      const styleIdx = titleSet.has(rIdx) ? 1 : headerSet.has(rIdx) ? 2 : 3
+      const customHeight = rowHeights[rIdx]
+      const heightAttrs = customHeight
+        ? ` ht="${customHeight}" customHeight="1"`
+        : titleSet.has(rIdx)
+          ? ` ht="28" customHeight="1"`
+          : headerSet.has(rIdx)
+            ? ` ht="34" customHeight="1"`
+            : ""
+
+      if (row.length === 0) {
+        return `<row r="${rowNumber}" ht="10" customHeight="1"/>`
+      }
+
+      const defaultRowStyle = titleSet.has(rIdx)
+        ? STYLE.TITLE_BANNER
+        : headerSet.has(rIdx)
+          ? STYLE.HEADER_SLATE
+          : STYLE.BODY_LEFT
+
       const cellsXml = row
         .map((cell, cIdx) => {
           const ref = `${excelColumnName(cIdx)}${rowNumber}`
+          let styleIdx = cellStyles[ref]
+          if (styleIdx === undefined) {
+            if (metaSet.has(rIdx)) {
+              styleIdx = cIdx === 0 ? STYLE.META_LABEL : STYLE.META_VALUE
+            } else {
+              styleIdx = defaultRowStyle
+            }
+          }
           if (typeof cell === "number" && Number.isFinite(cell)) {
             return `<c r="${ref}" s="${styleIdx}"><v>${cell}</v></c>`
           }
@@ -410,12 +488,238 @@ function buildWorksheetXml(sheet: XlsxSheetSpec): string {
           return `<c r="${ref}" s="${styleIdx}" t="inlineStr"><is><t xml:space="preserve">${escapeXml(str)}</t></is></c>`
         })
         .join("")
-      return `<row r="${rowNumber}">${cellsXml}</row>`
+      return `<row r="${rowNumber}"${heightAttrs}>${cellsXml}</row>`
     })
     .join("")
 
+  const merges = sheet.merges ?? []
+  const mergesXml =
+    merges.length > 0
+      ? `<mergeCells count="${merges.length}">${merges
+          .map((ref) => `<mergeCell ref="${ref}"/>`)
+          .join("")}</mergeCells>`
+      : ""
+
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${colsXml}<sheetData>${rowsXml}</sheetData></worksheet>`
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${colsXml}<sheetData>${rowsXml}</sheetData>${mergesXml}</worksheet>`
+}
+
+function packSheetsToXlsxBytes(sheets: XlsxSheetSpec[]): Uint8Array {
+  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  ${sheets
+    .map(
+      (_, i) =>
+        `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`,
+    )
+    .join("\n  ")}
+</Types>`
+
+  const rootRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`
+
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <sheets>
+    ${sheets
+      .map(
+        (s, i) =>
+          `<sheet name="${escapeXml(s.name.slice(0, 31))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`,
+      )
+      .join("\n    ")}
+  </sheets>
+</workbook>`
+
+  const workbookRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${sheets
+    .map(
+      (_, i) =>
+        `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`,
+    )
+    .join("\n  ")}
+  <Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`
+
+  const zipEntries: ZipEntryInput[] = [
+    { path: "[Content_Types].xml", data: contentTypesXml },
+    { path: "_rels/.rels", data: rootRelsXml },
+    { path: "xl/workbook.xml", data: workbookXml },
+    { path: "xl/_rels/workbook.xml.rels", data: workbookRelsXml },
+    { path: "xl/styles.xml", data: WORKBOOK_STYLES_XML },
+    ...sheets.map((sheet, idx) => ({
+      path: `xl/worksheets/sheet${idx + 1}.xml`,
+      data: buildWorksheetXml(sheet),
+    })),
+  ]
+
+  return createStoredZipBytes(zipEntries)
+}
+
+export function buildRecordSheetSpec(record: HistoryRecord): XlsxSheetSpec {
+  const rows = buildRecordRows(record)
+  const cellStyles: Record<string, number> = {}
+  const merges: string[] = []
+
+  if (record.type === "Sasaran Kinerja") {
+    const displayRows = getSasaranKinerjaDisplayRows(record)
+    const spans = computeTableMergeSpans(displayRows)
+
+    merges.push("A1:F1")
+    for (let mRow = 2; mRow <= 6; mRow++) {
+      merges.push(`B${mRow}:F${mRow}`)
+    }
+
+    const headerRowNum = 8
+    for (let col = 0; col < 6; col++) {
+      cellStyles[`${excelColumnName(col)}${headerRowNum}`] =
+        STYLE.HEADER_FULL_GREEN
+    }
+
+    const dataStartRowNum = 9
+    displayRows.forEach((_, idx) => {
+      const excelRow = dataStartRowNum + idx
+      const span = spans[idx]
+
+      cellStyles[`A${excelRow}`] = STYLE.BODY_CENTER
+      cellStyles[`B${excelRow}`] = STYLE.BODY_MERGED_BOLD
+      cellStyles[`C${excelRow}`] = STYLE.BODY_LEFT
+      cellStyles[`D${excelRow}`] = STYLE.BODY_LEFT
+      cellStyles[`E${excelRow}`] = STYLE.BODY_CENTER
+      cellStyles[`F${excelRow}`] = STYLE.BODY_LEFT
+
+      if (span.noSpan > 1) {
+        merges.push(`A${excelRow}:A${excelRow + span.noSpan - 1}`)
+      }
+      if (span.goalSpan > 1) {
+        merges.push(`B${excelRow}:B${excelRow + span.goalSpan - 1}`)
+      }
+      if (span.programSpan > 1) {
+        merges.push(`C${excelRow}:C${excelRow + span.programSpan - 1}`)
+      }
+    })
+
+    return {
+      name: "Sasaran Kinerja",
+      rows,
+      titleRowIndexes: [0],
+      metaRowIndexes: [1, 2, 3, 4, 5],
+      headerRowIndexes: [7],
+      colWidths: [7, 34, 30, 34, 24, 24],
+      merges,
+      cellStyles,
+    }
+  }
+
+  const displayRows = getTriwulanDisplayRows(record)
+  const spans = computeTableMergeSpans(displayRows)
+
+  merges.push("A1:M1")
+  for (let mRow = 2; mRow <= 7; mRow++) {
+    merges.push(`B${mRow}:M${mRow}`)
+  }
+
+  const headerRowNum = 9
+  for (let col = 0; col < 13; col++) {
+    const colRef = `${excelColumnName(col)}${headerRowNum}`
+    if (col <= 7) {
+      cellStyles[colRef] = STYLE.HEADER_SKY_BLUE
+    } else if (col <= 10) {
+      cellStyles[colRef] = STYLE.HEADER_SOFT_PINK
+    } else if (col === 11) {
+      cellStyles[colRef] = STYLE.HEADER_SOFT_GREEN
+    } else {
+      cellStyles[colRef] = STYLE.HEADER_BRIGHT_YELLOW
+    }
+  }
+
+  const dataStartRowNum = 10
+  displayRows.forEach((_, idx) => {
+    const excelRow = dataStartRowNum + idx
+    const span = spans[idx]
+
+    cellStyles[`A${excelRow}`] = STYLE.BODY_CENTER
+    cellStyles[`B${excelRow}`] = STYLE.BODY_MERGED_BOLD
+    cellStyles[`E${excelRow}`] = STYLE.BODY_CENTER
+    cellStyles[`H${excelRow}`] = STYLE.BODY_CENTER
+    cellStyles[`K${excelRow}`] = STYLE.BODY_CENTER
+
+    if (span.noSpan > 1) {
+      merges.push(`A${excelRow}:A${excelRow + span.noSpan - 1}`)
+    }
+    if (span.goalSpan > 1) {
+      merges.push(`B${excelRow}:B${excelRow + span.goalSpan - 1}`)
+    }
+    if (span.programSpan > 1) {
+      merges.push(`C${excelRow}:C${excelRow + span.programSpan - 1}`)
+    }
+  })
+
+  return {
+    name: "Laporan Triwulan",
+    rows,
+    titleRowIndexes: [0],
+    metaRowIndexes: [1, 2, 3, 4, 5, 6],
+    headerRowIndexes: [8],
+    colWidths: [6, 30, 28, 28, 22, 28, 28, 16, 24, 26, 20, 22, 28],
+    merges,
+    cellStyles,
+  }
+}
+
+export function buildSingleRecordWorkbookBytes(
+  record: HistoryRecord,
+): Uint8Array {
+  return packSheetsToXlsxBytes([buildRecordSheetSpec(record)])
+}
+
+export function exportRecordExcel(record: HistoryRecord): string {
+  const bytes = buildSingleRecordWorkbookBytes(record)
+  const safeId = sanitizePathSegment(record.id)
+  const suffix =
+    record.type === "Sasaran Kinerja" ? "Sasaran_Kinerja" : "Laporan_Triwulan"
+  triggerBlobDownload(
+    `${safeId}_${suffix}.xlsx`,
+    new Blob([bytes as BlobPart], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
+  )
+  return record.type === "Sasaran Kinerja"
+    ? "File Excel Sasaran Kinerja (.xlsx · 6 Kolom Resmi + Merge Sel) berhasil diunduh."
+    : "File Excel Laporan Triwulan (.xlsx · 13 Kolom Resmi + Merge Sel) berhasil diunduh."
+}
+
+export function exportArchiveRecapExcel(
+  records: HistoryRecord[],
+  yearFilter: string,
+  quarterFilter: string,
+): string {
+  const yearLabel = yearFilter || "Semua_Tahun"
+  const quarterLabel = quarterFilter ? `_TW_${quarterFilter}` : ""
+  const rows = buildSummaryIndexRows(records, yearFilter, quarterFilter)
+  const sheet: XlsxSheetSpec = {
+    name: "Daftar Dokumen",
+    rows,
+    titleRowIndexes: [0],
+    metaRowIndexes: [1, 2, 3, 4],
+    headerRowIndexes: [6],
+    colWidths: [6, 24, 18, 32, 18, 24, 16, 20, 22, 14, 16],
+    merges: ["A1:K1", "B2:K2", "B3:K3", "B4:K4", "B5:K5"],
+  }
+  const bytes = packSheetsToXlsxBytes([sheet])
+  triggerBlobDownload(
+    `Ringkasan_Dokumen_SIPETRI_${yearLabel}${quarterLabel}.xlsx`,
+    new Blob([bytes as BlobPart], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
+  )
+  return `Ringkasan Daftar Dokumen (${records.length} dokumen, .xlsx) berhasil diunduh.`
 }
 
 export function buildMasterWorkbookBytes(
@@ -447,18 +751,38 @@ export function buildMasterWorkbookBytes(
   }
 
   const unitSummaryRows: (string | number)[][] = [
-    [`REKAP MASTER KEPATUHAN 42 UNIT KERJA ITPLN - TAHUN ${targetYear}`],
+    [
+      `REKAP MASTER KEPATUHAN 42 UNIT KERJA ITPLN - TAHUN ${targetYear}`,
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+    ],
     [
       "Filter Tahun",
       yearFilter || `Semua Tahun (Matriks mengacu ${targetYear})`,
       "Filter Triwulan",
       quarterFilter ? `Triwulan ${quarterFilter}` : "Semua Periode",
+      "",
+      "",
+      "",
+      "",
+      "",
     ],
     [
       "Total Dokumen Terfilter",
       submitted.length,
       "Waktu Unduh",
       new Date().toLocaleString("id-ID"),
+      "",
+      "",
+      "",
+      "",
+      "",
     ],
     [],
     [
@@ -529,7 +853,10 @@ export function buildMasterWorkbookBytes(
   )
 
   const triwulanDetailRows: (string | number)[][] = [
-    ["RINCIAN MASTER LAPORAN REALISASI TRIWULAN (13 KOLOM)"],
+    [
+      "RINCIAN MASTER LAPORAN REALISASI TRIWULAN (13 KOLOM RESMI)",
+      ...Array.from({ length: 18 }, () => ""),
+    ],
     [],
     [
       "ID DOKUMEN",
@@ -554,40 +881,82 @@ export function buildMasterWorkbookBytes(
     ],
   ]
 
+  const triwulanMerges: string[] = ["A1:S1"]
+  const triwulanCellStyles: Record<string, number> = {}
+  for (let col = 0; col < 19; col++) {
+    const ref = `${excelColumnName(col)}3`
+    if (col >= 5 && col <= 12) {
+      triwulanCellStyles[ref] = STYLE.HEADER_SKY_BLUE
+    } else if (col >= 13 && col <= 15) {
+      triwulanCellStyles[ref] = STYLE.HEADER_SOFT_PINK
+    } else if (col >= 16 && col <= 17) {
+      triwulanCellStyles[ref] = STYLE.HEADER_SOFT_GREEN
+    } else if (col === 18) {
+      triwulanCellStyles[ref] = STYLE.HEADER_BRIGHT_YELLOW
+    }
+  }
+
   for (const rec of submitted.filter((r) => r.type === "Laporan Triwulan")) {
     const org = resolveOrganization(rec)
-    const progs = getTriwulanData(rec)
-    let rNo = 0
-    progs.forEach((prog) => {
-      prog.sasaranList.forEach((sas) => {
-        rNo += 1
-        triwulanDetailRows.push([
-          rec.id,
-          rec.period,
-          org?.parentUnit ?? rec.parentUnit ?? rec.unit,
-          org?.subUnit ?? rec.subUnit ?? rec.unit,
-          rec.status,
-          rNo,
-          sas.strategicGoal || prog.strategicGoal,
-          prog.program,
-          sas.target,
-          sas.month,
-          sas.stage,
-          sas.realization,
-          sas.percentage,
-          sas.obstacle,
-          sas.solution,
-          sas.solutionTime,
-          sas.lateStatus ?? "Tepat Waktu",
-          sas.notes,
-          sas.evidence,
-        ])
-      })
+    const displayRows = getTriwulanDisplayRows(rec)
+    const spans = computeTableMergeSpans(displayRows)
+    const startExcelRow = triwulanDetailRows.length + 1
+
+    if (displayRows.length > 1) {
+      const endDocRow = startExcelRow + displayRows.length - 1
+      for (const colLetter of ["A", "B", "C", "D", "E"]) {
+        triwulanMerges.push(`${colLetter}${startExcelRow}:${colLetter}${endDocRow}`)
+      }
+    }
+
+    displayRows.forEach((row, idx) => {
+      const excelRow = startExcelRow + idx
+      const span = spans[idx]
+      const sas = row.sasaran
+      triwulanCellStyles[`F${excelRow}`] = STYLE.BODY_CENTER
+      triwulanCellStyles[`G${excelRow}`] = STYLE.BODY_MERGED_BOLD
+      triwulanCellStyles[`J${excelRow}`] = STYLE.BODY_CENTER
+      triwulanCellStyles[`M${excelRow}`] = STYLE.BODY_CENTER
+
+      if (span.noSpan > 1) {
+        triwulanMerges.push(`F${excelRow}:F${excelRow + span.noSpan - 1}`)
+      }
+      if (span.goalSpan > 1) {
+        triwulanMerges.push(`G${excelRow}:G${excelRow + span.goalSpan - 1}`)
+      }
+      if (span.programSpan > 1) {
+        triwulanMerges.push(`H${excelRow}:H${excelRow + span.programSpan - 1}`)
+      }
+
+      triwulanDetailRows.push([
+        idx === 0 ? rec.id : "",
+        idx === 0 ? rec.period : "",
+        idx === 0 ? (org?.parentUnit ?? rec.parentUnit ?? rec.unit) : "",
+        idx === 0 ? (org?.subUnit ?? rec.subUnit ?? rec.unit) : "",
+        idx === 0 ? rec.status : "",
+        span.noSpan > 0 ? span.groupNumber : "",
+        span.goalSpan > 0 ? row.strategicGoal : "",
+        span.programSpan > 0 ? row.programName : "",
+        sas.target,
+        sas.month,
+        sas.stage,
+        sas.realization,
+        sas.percentage,
+        sas.obstacle,
+        sas.solution,
+        sas.solutionTime,
+        sas.lateStatus ?? "Tepat Waktu",
+        sas.notes,
+        sas.evidence,
+      ])
     })
   }
 
   const sasaranDetailRows: (string | number)[][] = [
-    ["RINCIAN MASTER SASARAN KINERJA TAHUNAN / RKA (6 KOLOM)"],
+    [
+      "RINCIAN MASTER SASARAN KINERJA TAHUNAN / RKA (6 KOLOM RESMI)",
+      ...Array.from({ length: 10 }, () => ""),
+    ],
     [],
     [
       "ID DOKUMEN",
@@ -595,6 +964,7 @@ export function buildMasterWorkbookBytes(
       "UNIT UTAMA",
       "SUB UNIT",
       "STATUS",
+      "NO",
       "SASARAN STRATEGIS",
       "PROGRAM KERJA",
       "SASARAN KINERJA",
@@ -603,63 +973,56 @@ export function buildMasterWorkbookBytes(
     ],
   ]
 
+  const sasaranMerges: string[] = ["A1:K1"]
+  const sasaranCellStyles: Record<string, number> = {}
+  for (let col = 5; col <= 10; col++) {
+    sasaranCellStyles[`${excelColumnName(col)}3`] = STYLE.HEADER_FULL_GREEN
+  }
+
   for (const rec of submitted.filter((r) => r.type === "Sasaran Kinerja")) {
     const org = resolveOrganization(rec)
-    if (rec.criteriaData && rec.criteriaData.length > 0) {
-      rec.criteriaData.forEach((crit) => {
-        const strats =
-          crit.strategies && crit.strategies.length > 0
-            ? crit.strategies
-            : crit.strategy
-              ? [crit.strategy]
-              : []
-        strats.forEach((strat) => {
-          const goalName = strat.name || crit.name || "-"
-          strat.programs.forEach((prog) => {
-            const sList =
-              prog.sasaranList && prog.sasaranList.length > 0
-                ? prog.sasaranList
-                : prog.targets.map((t) => ({
-                    sasaran: t.sasaran ?? t.target ?? "",
-                    bulan_mulai: t.bulan_mulai ?? t.monthStart ?? "",
-                    bulan_selesai: t.bulan_selesai ?? t.monthEnd ?? "",
-                    keterangan: t.keterangan ?? t.notes ?? "",
-                  }))
-            sList.forEach((sas) => {
-              sasaranDetailRows.push([
-                rec.id,
-                rec.period,
-                org?.parentUnit ?? rec.parentUnit ?? rec.unit,
-                org?.subUnit ?? rec.subUnit ?? rec.unit,
-                rec.status,
-                goalName,
-                prog.name,
-                sas.sasaran || "-",
-                formatBulanPelaksanaan(sas.bulan_mulai, sas.bulan_selesai),
-                sas.keterangan || "-",
-              ])
-            })
-          })
-        })
-      })
-    } else {
-      const getVal = (lbl: string) =>
-        rec.items.find((i) =>
-          i.label.toLowerCase().includes(lbl.toLowerCase()),
-        )?.value ?? "-"
-      sasaranDetailRows.push([
-        rec.id,
-        rec.period,
-        org?.parentUnit ?? rec.parentUnit ?? rec.unit,
-        org?.subUnit ?? rec.subUnit ?? rec.unit,
-        rec.status,
-        getVal("Strategi"),
-        getVal("Program"),
-        getVal("Sasaran"),
-        getVal("Bulan"),
-        getVal("Keterangan"),
-      ])
+    const displayRows = getSasaranKinerjaDisplayRows(rec)
+    const spans = computeTableMergeSpans(displayRows)
+    const startExcelRow = sasaranDetailRows.length + 1
+
+    if (displayRows.length > 1) {
+      const endDocRow = startExcelRow + displayRows.length - 1
+      for (const colLetter of ["A", "B", "C", "D", "E"]) {
+        sasaranMerges.push(`${colLetter}${startExcelRow}:${colLetter}${endDocRow}`)
+      }
     }
+
+    displayRows.forEach((row, idx) => {
+      const excelRow = startExcelRow + idx
+      const span = spans[idx]
+      sasaranCellStyles[`F${excelRow}`] = STYLE.BODY_CENTER
+      sasaranCellStyles[`G${excelRow}`] = STYLE.BODY_MERGED_BOLD
+      sasaranCellStyles[`J${excelRow}`] = STYLE.BODY_CENTER
+
+      if (span.noSpan > 1) {
+        sasaranMerges.push(`F${excelRow}:F${excelRow + span.noSpan - 1}`)
+      }
+      if (span.goalSpan > 1) {
+        sasaranMerges.push(`G${excelRow}:G${excelRow + span.goalSpan - 1}`)
+      }
+      if (span.programSpan > 1) {
+        sasaranMerges.push(`H${excelRow}:H${excelRow + span.programSpan - 1}`)
+      }
+
+      sasaranDetailRows.push([
+        idx === 0 ? rec.id : "",
+        idx === 0 ? rec.period : "",
+        idx === 0 ? (org?.parentUnit ?? rec.parentUnit ?? rec.unit) : "",
+        idx === 0 ? (org?.subUnit ?? rec.subUnit ?? rec.unit) : "",
+        idx === 0 ? rec.status : "",
+        span.noSpan > 0 ? span.groupNumber : "",
+        span.goalSpan > 0 ? row.strategicGoal : "",
+        span.programSpan > 0 ? row.programName : "",
+        row.sasaran,
+        row.bulanFormatted,
+        row.keterangan,
+      ])
+    })
   }
 
   const sheets: XlsxSheetSpec[] = [
@@ -669,119 +1032,41 @@ export function buildMasterWorkbookBytes(
       titleRowIndexes: [0],
       headerRowIndexes: [4],
       colWidths: [6, 26, 18, 22, 16, 16, 16, 16, 22],
+      merges: ["A1:I1"],
     },
     {
       name: "Daftar Dokumen",
       rows: documentRows,
       titleRowIndexes: [0],
+      metaRowIndexes: [1, 2, 3, 4],
       headerRowIndexes: [6],
       colWidths: [6, 22, 18, 30, 18, 24, 16, 20, 22, 14, 16],
+      merges: ["A1:K1", "B2:K2", "B3:K3", "B4:K4", "B5:K5"],
     },
     {
       name: "Rincian Triwulan",
       rows: triwulanDetailRows,
       titleRowIndexes: [0],
       headerRowIndexes: [2],
-      colWidths: [20, 16, 22, 14, 12, 10, 28, 28, 18, 28, 28, 14, 24, 24, 18, 20, 28],
+      colWidths: [
+        20, 16, 22, 14, 12, 6, 30, 28, 28, 20, 28, 28, 14, 24, 24, 18, 18, 20,
+        28,
+      ],
+      merges: triwulanMerges,
+      cellStyles: triwulanCellStyles,
     },
     {
       name: "Rincian Sasaran RKA",
       rows: sasaranDetailRows,
       titleRowIndexes: [0],
       headerRowIndexes: [2],
-      colWidths: [20, 14, 22, 14, 12, 26, 28, 28, 28, 18, 22],
+      colWidths: [20, 14, 22, 14, 12, 6, 32, 28, 30, 20, 22],
+      merges: sasaranMerges,
+      cellStyles: sasaranCellStyles,
     },
   ]
 
-  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
-  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
-  ${sheets
-    .map(
-      (_, i) =>
-        `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`,
-    )
-    .join("\n  ")}
-</Types>`
-
-  const rootRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
-</Relationships>`
-
-  const workbookXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets>
-    ${sheets
-      .map(
-        (s, i) =>
-          `<sheet name="${escapeXml(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`,
-      )
-      .join("\n    ")}
-  </sheets>
-</workbook>`
-
-  const workbookRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  ${sheets
-    .map(
-      (_, i) =>
-        `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`,
-    )
-    .join("\n  ")}
-  <Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
-</Relationships>`
-
-  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="3">
-    <font><sz val="10"/><color rgb="FF17213A"/><name val="Calibri"/></font>
-    <font><b/><sz val="12"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
-    <font><b/><sz val="10"/><color rgb="FF162A52"/><name val="Calibri"/></font>
-  </fonts>
-  <fills count="4">
-    <fill><patternFill patternType="none"/></fill>
-    <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FF162A52"/></patternFill></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FFEAF0F7"/></patternFill></fill>
-  </fills>
-  <borders count="2">
-    <border><left/><right/><top/><bottom/><diagonal/></border>
-    <border>
-      <left style="thin"><color rgb="FFCBD5E1"/></left>
-      <right style="thin"><color rgb="FFCBD5E1"/></right>
-      <top style="thin"><color rgb="FFCBD5E1"/></top>
-      <bottom style="thin"><color rgb="FFCBD5E1"/></bottom>
-      <diagonal/>
-    </border>
-  </borders>
-  <cellStyleXfs count="1">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>
-  </cellStyleXfs>
-  <cellXfs count="4">
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
-    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
-    <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf>
-    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf>
-  </cellXfs>
-</styleSheet>`
-
-  const zipEntries: ZipEntryInput[] = [
-    { path: "[Content_Types].xml", data: contentTypesXml },
-    { path: "_rels/.rels", data: rootRelsXml },
-    { path: "xl/workbook.xml", data: workbookXml },
-    { path: "xl/_rels/workbook.xml.rels", data: workbookRelsXml },
-    { path: "xl/styles.xml", data: stylesXml },
-    ...sheets.map((sheet, idx) => ({
-      path: `xl/worksheets/sheet${idx + 1}.xml`,
-      data: buildWorksheetXml(sheet),
-    })),
-  ]
-
-  return createStoredZipBytes(zipEntries)
+  return packSheetsToXlsxBytes(sheets)
 }
 
 export function exportArchiveMasterXlsx(
@@ -798,7 +1083,7 @@ export function exportArchiveMasterXlsx(
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     }),
   )
-  return `Rekap Master Excel (${records.length} dokumen, 4 sheet .xlsx) berhasil diunduh.`
+  return `Rekap Master Excel (${records.length} dokumen, 4 sheet .xlsx + Merge Sel) berhasil diunduh.`
 }
 
 function sanitizePathSegment(value: string): string {
@@ -815,12 +1100,23 @@ export function buildUnitPackageZipBytes(
   quarterFilter: string,
 ): Uint8Array {
   const submitted = records.filter((r) => r.status !== "Draf")
-  const indexCsv = `\ufeff${toCsv(buildSummaryIndexRows(submitted, yearFilter, quarterFilter))}`
+  const indexSheet: XlsxSheetSpec = {
+    name: "Indeks Arsip",
+    rows: buildSummaryIndexRows(submitted, yearFilter, quarterFilter),
+    titleRowIndexes: [0],
+    metaRowIndexes: [1, 2, 3, 4],
+    headerRowIndexes: [6],
+    colWidths: [6, 24, 18, 32, 18, 24, 16, 20, 22, 14, 16],
+    merges: ["A1:K1", "B2:K2", "B3:K3", "B4:K4", "B5:K5"],
+  }
   const entries: ZipEntryInput[] = [
-    { path: "00_Indeks_Arsip_SIPETRI.csv", data: indexCsv },
+    {
+      path: "00_Indeks_Arsip_SIPETRI.xlsx",
+      data: packSheetsToXlsxBytes([indexSheet]),
+    },
   ]
 
-  const seenPaths = new Set<string>(["00_Indeks_Arsip_SIPETRI.csv"])
+  const seenPaths = new Set<string>(["00_Indeks_Arsip_SIPETRI.xlsx"])
   for (const rec of submitted) {
     const org = resolveOrganization(rec)
     const parentSegment = sanitizePathSegment(
@@ -836,16 +1132,16 @@ export function buildUnitPackageZipBytes(
     const docTag =
       rec.type === "Sasaran Kinerja" ? "Sasaran_Kinerja" : "Laporan_Triwulan"
     const baseName = `${sanitizePathSegment(rec.id)}_${docTag}`
-    let candidatePath = `${folder}/${baseName}.csv`
+    let candidatePath = `${folder}/${baseName}.xlsx`
     let suffix = 2
     while (seenPaths.has(candidatePath)) {
-      candidatePath = `${folder}/${baseName}_${suffix}.csv`
+      candidatePath = `${folder}/${baseName}_${suffix}.xlsx`
       suffix++
     }
     seenPaths.add(candidatePath)
     entries.push({
       path: candidatePath,
-      data: `\ufeff${toCsv(buildRecordRows(rec))}`,
+      data: buildSingleRecordWorkbookBytes(rec),
     })
   }
 
@@ -864,5 +1160,5 @@ export function exportArchiveUnitZip(
     `Arsip_Paket_Unit_SIPETRI_${yearLabel}${quarterLabel}.zip`,
     new Blob([bytes as BlobPart], { type: "application/zip" }),
   )
-  return `Arsip Paket Unit (${records.length} dokumen dalam folder unit .zip) berhasil diunduh.`
+  return `Arsip Paket Unit (${records.length} dokumen .xlsx dalam folder unit .zip) berhasil diunduh.`
 }

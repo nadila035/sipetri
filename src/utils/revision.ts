@@ -45,21 +45,28 @@ export function reviseRecord(
     let updatedProgram = false
     let updatedGoal = false
 
-    const sasaranList = p.sasaranList.map((s) => {
+    const sasaranList = p.sasaranList.map((s, sIdx) => {
       const takenGoal = take(
         "Sasaran Strategis",
         s.strategicGoal || strategicGoal,
       )
-      if (!updatedGoal && takenGoal && takenGoal !== "-") {
+      if (sIdx === 0 && takenGoal && takenGoal !== "-") {
         strategicGoal = takenGoal
         updatedGoal = true
       }
 
       const takenProgram = take("Program Kerja", program)
-      if (!updatedProgram) {
+      if (sIdx === 0) {
         program = takenProgram
         updatedProgram = true
       }
+
+      const resolvedGoal = updatedGoal
+        ? strategicGoal
+        : takenGoal && takenGoal !== "-"
+          ? takenGoal
+          : s.strategicGoal || strategicGoal
+      const resolvedProgram = updatedProgram ? program : takenProgram
 
       const target = take("Sasaran", s.target)
 
@@ -77,10 +84,11 @@ export function reviseRecord(
         ),
       )
 
+      program = resolvedProgram
+
       return {
         ...s,
-        strategicGoal:
-          takenGoal && takenGoal !== "-" ? takenGoal : s.strategicGoal,
+        strategicGoal: resolvedGoal,
         target,
         monthStart,
         monthEnd,

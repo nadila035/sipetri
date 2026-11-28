@@ -21,9 +21,17 @@ import {
   buildSasaranKinerjaItems,
   buildTriwulanItems,
   createEmptyTriwulanSasaran,
+  extractFlatSasaranRows,
   formatStageWithTargetTime,
+  rebuildCriteriaFromFlatRows,
   splitStageTargetTime,
 } from "./src/utils/drafts.ts"
+
+import {
+  computeTableMergeSpans,
+  getSasaranKinerjaDisplayRows,
+  getTriwulanDisplayRows,
+} from "./src/utils/format.ts"
 
 import {
   formatReviewItemLocation,
@@ -65,6 +73,7 @@ import {
 
 import {
   buildMasterWorkbookBytes,
+  buildSingleRecordWorkbookBytes,
   buildUnitPackageZipBytes,
 } from "./src/utils/exportExcel.ts"
 
@@ -906,9 +915,175 @@ test("Master Recap .xlsx and Unit Package .zip builders produce valid PKZIP cont
   assert.equal(zipBytes[0], 0x50)
   assert.equal(zipBytes[1], 0x4b)
   const zipText = new TextDecoder().decode(zipBytes)
-  assert.ok(zipText.includes("00_Indeks_Arsip_SIPETRI.csv"))
-  assert.ok(zipText.includes("FKET/SK-2026-FKET_Sasaran_Kinerja.csv"))
-  assert.ok(zipText.includes("PRP/BPK/LTR-2026-I-BPK_Laporan_Triwulan.csv"))
+  assert.ok(zipText.includes("00_Indeks_Arsip_SIPETRI.xlsx"))
+  assert.ok(zipText.includes("FKET/SK-2026-FKET_Sasaran_Kinerja.xlsx"))
+  assert.ok(zipText.includes("PRP/BPK/LTR-2026-I-BPK_Laporan_Triwulan.xlsx"))
+})
+
+test("Independent Sasaran Strategis per row, merge spans, and XLSX mergeCells work accurately", () => {
+  // Step 1: Start with 2 rows sharing SS-05 and Program Kerja "hghgh", plus Row 3 under SS-05 with "jbbhbh"
+  const initialCriteria = rebuildCriteriaFromFlatRows([
+    {
+      strategicGoalId: "ss-itpln-05",
+      strategicGoal:
+        "Peningkatan Prestasi Kemahasiswaan, Karier Alumni, dan Kerjasama Industri",
+      programName: "hghgh",
+      sasaranId: "sas-1",
+      sasaranText: "bjbjjb",
+      bulanMulai: "2026-01",
+      bulanSelesai: "2026-12",
+      keterangan: "jjjhhjb",
+    },
+    {
+      strategicGoalId: "ss-itpln-05",
+      strategicGoal:
+        "Peningkatan Prestasi Kemahasiswaan, Karier Alumni, dan Kerjasama Industri",
+      programName: "hghgh",
+      sasaranId: "sas-2",
+      sasaranText: "mmnkn",
+      bulanMulai: "2026-01",
+      bulanSelesai: "2026-12",
+      keterangan: "nnnkm",
+    },
+    {
+      strategicGoalId: "ss-itpln-05",
+      strategicGoal:
+        "Peningkatan Prestasi Kemahasiswaan, Karier Alumni, dan Kerjasama Industri",
+      programName: "jbbhbh",
+      sasaranId: "sas-3",
+      sasaranText: "nknkkn",
+      bulanMulai: "2026-01",
+      bulanSelesai: "2026-12",
+      keterangan: "nknkkn",
+    },
+  ])
+
+  const initialRecord = {
+    id: "SK-2026-FTBE-MERGE",
+    type: "Sasaran Kinerja",
+    title: "Sasaran Kinerja Tahun 2026",
+    period: "Tahun 2026",
+    unit: "FTBE",
+    parentUnit: "FTBE",
+    subUnit: "FTBE",
+    sentAt: "28/11/2026",
+    status: "Disetujui",
+    progress: 100,
+    criteriaData: initialCriteria,
+    items: buildSasaranKinerjaItems(initialCriteria),
+  }
+
+  // Verify contiguous merge spans on initial 3 rows:
+  // Rows 1 & 2 share No = 1 (noSpan = 2), Goal spans 3 rows, Program 1 spans 2 rows; Row 3 becomes No = 2 (noSpan = 1)!
+  const displayBefore = getSasaranKinerjaDisplayRows(initialRecord)
+  const spansBefore = computeTableMergeSpans(displayBefore)
+  assert.deepEqual(
+    spansBefore.map((s) => [
+      s.groupNumber,
+      s.noSpan,
+      s.goalSpan,
+      s.programSpan,
+    ]),
+    [
+      [1, 2, 3, 2],
+      [1, 0, 0, 0],
+      [2, 1, 0, 1],
+    ],
+  )
+
+  // Verify single-record XLSX export emits real <mergeCells> for A9:A10 (No), B9:B11 (Sasaran Strategis), and C9:C10 (Program Kerja)
+  const skXlsxBytes = buildSingleRecordWorkbookBytes(initialRecord)
+  const skXlsxXml = new TextDecoder().decode(skXlsxBytes)
+  assert.ok(skXlsxXml.includes('<mergeCell ref="A9:A10"/>'))
+  assert.ok(skXlsxXml.includes('<mergeCell ref="B9:B11"/>'))
+  assert.ok(skXlsxXml.includes('<mergeCell ref="C9:C10"/>'))
+  assert.ok(skXlsxXml.includes("FF4ED64E"))
+
+  // Step 2: Edit ONLY Row 2 ("mmnkn") to choose a DIFFERENT Sasaran Strategis (SS-02) while keeping Program Kerja "hghgh"!
+  const extracted = extractFlatSasaranRows(initialCriteria)
+  assert.equal(extracted.length, 3)
+  extracted[1] = {
+    ...extracted[1],
+    criteriaId: undefined,
+    strategyId: undefined,
+    programId: undefined,
+    strategicGoalId: "ss-itpln-02",
+    strategicGoal:
+      "Penguatan Riset Terapan Transisi Energi dan Inovasi Pengabdian",
+  }
+
+  const afterEditCriteria = rebuildCriteriaFromFlatRows(extracted)
+  const afterEditRows = extractFlatSasaranRows(afterEditCriteria)
+  assert.equal(afterEditRows.length, 3)
+  // Row 1 MUST keep SS-05!
+  assert.equal(
+    afterEditRows[0].strategicGoal,
+    "Peningkatan Prestasi Kemahasiswaan, Karier Alumni, dan Kerjasama Industri",
+  )
+  assert.equal(afterEditRows[0].programName, "hghgh")
+  // Row 2 MUST keep its newly chosen SS-02 even though Program Kerja is also "hghgh"!
+  assert.equal(
+    afterEditRows[1].strategicGoal,
+    "Penguatan Riset Terapan Transisi Energi dan Inovasi Pengabdian",
+  )
+  assert.equal(afterEditRows[1].programName, "hghgh")
+  // Row 3 MUST also remain untouched (SS-05, jbbhbh)!
+  assert.equal(
+    afterEditRows[2].strategicGoal,
+    "Peningkatan Prestasi Kemahasiswaan, Karier Alumni, dan Kerjasama Industri",
+  )
+  assert.equal(afterEditRows[2].programName, "jbbhbh")
+
+  // Verify merge spans do NOT merge "hghgh" or "No" across SS-05 (Row 1) and SS-02 (Row 2)
+  const spansAfterEdit = computeTableMergeSpans(afterEditRows)
+  assert.deepEqual(
+    spansAfterEdit.map((s) => [
+      s.groupNumber,
+      s.noSpan,
+      s.goalSpan,
+      s.programSpan,
+    ]),
+    [
+      [1, 1, 1, 1],
+      [2, 1, 1, 1],
+      [3, 1, 1, 1],
+    ],
+  )
+
+  // Verify Triwulan sync preserves distinct Sasaran Strategis when Program Kerja names match
+  const updatedApprovedRecord = {
+    ...initialRecord,
+    criteriaData: afterEditCriteria,
+    items: buildSasaranKinerjaItems(afterEditCriteria),
+  }
+  const syncedTw = syncTriwulanFromApprovedAnnual({
+    existingPrograms: [],
+    approvedRecord: updatedApprovedRecord,
+    allRecords: [updatedApprovedRecord],
+    year: "2026",
+    quarter: "I",
+    unitCode: "FTBE",
+  })
+  const twDisplay = getTriwulanDisplayRows({
+    id: "LTR-2026-I-FTBE",
+    type: "Laporan Triwulan",
+    title: "Laporan Realisasi Triwulan I",
+    period: "Triwulan I · 2026",
+    unit: "FTBE",
+    sentAt: "28/11/2026",
+    status: "Draf",
+    progress: 0,
+    items: buildTriwulanItems(syncedTw),
+    triwulanPrograms: syncedTw,
+  })
+  assert.equal(
+    twDisplay[0].strategicGoal,
+    "Peningkatan Prestasi Kemahasiswaan, Karier Alumni, dan Kerjasama Industri",
+  )
+  assert.equal(
+    twDisplay[1].strategicGoal,
+    "Penguatan Riset Terapan Transisi Energi dan Inovasi Pengabdian",
+  )
 })
 
 

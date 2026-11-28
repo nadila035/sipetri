@@ -279,7 +279,7 @@ export function AdminMasterSasaranStrategis({
           </div>
         </div>
 
-        <div className="admin-table-wrap">
+        <div className="admin-table-wrap" data-lenis-prevent>
           <table>
             <thead>
               <tr>
@@ -410,7 +410,7 @@ export function AdminMasterSasaranStrategis({
               </button>
             </header>
 
-            <div className="triwulan-row-modal-body">
+            <div className="triwulan-row-modal-body" data-lenis-prevent>
               {modalError && (
                 <div className="login-error" role="alert">
                   <span aria-hidden="true">!</span>

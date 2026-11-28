@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react"
 import type { SetStateAction } from "react"
+import { AnimatePresence, motion } from "motion/react"
 import {
   describePeriodLockReason,
   formatDeadlineSummary,
@@ -25,17 +26,21 @@ import {
   calculateSasaranKinerjaCompleteness,
   createEmptyCriteria,
   createEmptySasaran,
-  createEmptyStrategy,
-  createEmptyWorkProgram,
+  extractFlatSasaranRows,
   formatUpdatedAtLabel,
-  getProgramSasaran,
-  getStrategies,
   hasCriteriaContent,
+  insertItemAt,
   normalizeCriteriaList,
   promoteDraftToSubmitted,
+  rebuildCriteriaFromFlatRows,
   upsertDraftRecord,
+  type FlatSasaranInputRow,
 } from "../utils/drafts"
-import { formatBulanPelaksanaan } from "../utils/format"
+import {
+  computeTableMergeSpans,
+  formatBulanPelaksanaan,
+} from "../utils/format"
+import { exportRecordExcel } from "../utils/exportExcel"
 import {
   getUnitAnnualPrerequisiteState,
   recordMatchesUnitCode,
@@ -59,27 +64,16 @@ type InputSasaranKinerjaProps = {
   onOpenTriwulan?: () => void
 }
 
-type FlatSasaranRow = {
+type FlatSasaranRow = FlatSasaranInputRow & {
+  rowIndex: number
   rowNumber: number
-  criteriaId: string
-  strategyId: string
-  strategicGoalId: string
-  strategicGoal: string
-  programId: string
-  programName: string
-  sasaranId: string
-  sasaranText: string
-  bulanMulai: string
-  bulanSelesai: string
-  keterangan: string
   isComplete: boolean
 }
 
 type ModalEditorState = {
   mode: "create" | "edit" | "addSasaranToProgram"
-  criteriaId?: string
-  strategyId?: string
-  programId?: string
+  groupNumber?: number
+  rowIndex?: number
   sasaranId?: string
   strategicGoalId: string
   strategicGoal: string
@@ -148,10 +142,14 @@ export function InputSasaranKinerja({
   const [successInfo, setSuccessInfo] = useState<SubmitSuccessInfo | null>(null)
   const [attempted, setAttempted] = useState(false)
 
-  useDialog(Boolean(modalState), () => {
-    setModalState(null)
-    setModalError("")
-  }, ".sasaran-row-modal-overlay")
+  useDialog(
+    Boolean(modalState),
+    () => {
+      setModalState(null)
+      setModalError("")
+    },
+    ".sasaran-row-modal-overlay",
+  )
 
   const yearOptions = Array.from(
     new Set([...collectReportingYears(data), draftYear]),
@@ -302,56 +300,42 @@ export function InputSasaranKinerja({
   )
 
   const flatRows = useMemo<FlatSasaranRow[]>(() => {
-    const rows: FlatSasaranRow[] = []
-    let counter = 0
-    for (const crit of criteria) {
-      const strategies = getStrategies(crit)
-      for (const strat of strategies) {
-        const goalName = strat.name.trim() || crit.name.trim()
-        for (const prog of strat.programs) {
-          const sList = getProgramSasaran(prog)
-          for (const sas of sList) {
-            const hasAnyField = Boolean(
-              goalName ||
-                prog.name.trim() ||
-                sas.sasaran.trim() ||
-                sas.bulan_mulai.trim() ||
-                (sas.bulan_selesai ?? "").trim() ||
-                sas.keterangan.trim(),
-            )
-            if (!hasAnyField && criteria.length === 1 && rows.length === 0) {
-              continue
-            }
-            counter += 1
-            const validDates =
-              Boolean(sas.bulan_mulai) &&
-              (!sas.bulan_selesai || sas.bulan_selesai >= sas.bulan_mulai)
-            rows.push({
-              rowNumber: counter,
-              criteriaId: crit.id,
-              strategyId: strat.id,
-              strategicGoalId: strat.strategicGoalId ?? "",
-              strategicGoal: goalName,
-              programId: prog.id,
-              programName: prog.name,
-              sasaranId: sas.id,
-              sasaranText: sas.sasaran,
-              bulanMulai: sas.bulan_mulai,
-              bulanSelesai: sas.bulan_selesai ?? "",
-              keterangan: sas.keterangan,
-              isComplete: Boolean(
-                goalName &&
-                  prog.name.trim() &&
-                  sas.sasaran.trim() &&
-                  validDates,
-              ),
-            })
-          }
-        }
+    const rawRows = extractFlatSasaranRows(criteria)
+    return rawRows.map((entry, idx) => {
+      const validDates =
+        Boolean(entry.bulanMulai) &&
+        (!entry.bulanSelesai || entry.bulanSelesai >= entry.bulanMulai)
+      return {
+        ...entry,
+        rowIndex: idx,
+        rowNumber: idx + 1,
+        isComplete: Boolean(
+          entry.strategicGoal.trim() &&
+            entry.programName.trim() &&
+            entry.sasaranText.trim() &&
+            validDates,
+        ),
+      }
+    })
+  }, [criteria])
+
+  const mergeSpans = useMemo(
+    () => computeTableMergeSpans(flatRows),
+    [flatRows],
+  )
+
+  const existingProgramSuggestions = useMemo(() => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const r of flatRows) {
+      const clean = r.programName.trim()
+      if (clean && !seen.has(clean.toLowerCase())) {
+        seen.add(clean.toLowerCase())
+        out.push(clean)
       }
     }
-    return rows
-  }, [criteria])
+    return out
+  }, [flatRows])
 
   const openCreateModal = () => {
     if (isLockedForNewInput) {
@@ -361,12 +345,11 @@ export function InputSasaranKinerja({
       )
       return
     }
-    const defaultGoal = strategicGoals[0]
     setModalError("")
     setModalState({
       mode: "create",
-      strategicGoalId: defaultGoal?.id ?? "",
-      strategicGoal: defaultGoal?.name ?? "",
+      strategicGoalId: "",
+      strategicGoal: "",
       programName: "",
       sasaranText: "",
       bulanMulai: `${draftYear}-01`,
@@ -375,35 +358,41 @@ export function InputSasaranKinerja({
     })
   }
 
-  const openAddSasaranToProgram = (row: FlatSasaranRow) => {
+  const openAddSasaranToProgram = (
+    row: FlatSasaranRow,
+    groupNumber: number,
+  ) => {
+    const matchedGoal = strategicGoals.find(
+      (g) =>
+        (row.strategicGoalId && g.id === row.strategicGoalId) ||
+        g.name.trim().toLowerCase() === row.strategicGoal.trim().toLowerCase(),
+    )
     setModalError("")
     setModalState({
       mode: "addSasaranToProgram",
-      criteriaId: row.criteriaId,
-      strategyId: row.strategyId,
-      programId: row.programId,
-      strategicGoalId: row.strategicGoalId,
-      strategicGoal: row.strategicGoal,
+      groupNumber,
+      rowIndex: row.rowIndex,
+      strategicGoalId: matchedGoal?.id ?? row.strategicGoalId,
+      strategicGoal: matchedGoal?.name ?? row.strategicGoal,
       programName: row.programName,
       sasaranText: "",
       bulanMulai: row.bulanMulai || `${draftYear}-01`,
-      bulanSelesai: row.bulanSelesai || "",
+      bulanSelesai: row.bulanSelesai || `${draftYear}-12`,
       keterangan: "",
     })
   }
 
-  const openEditRowModal = (row: FlatSasaranRow) => {
+  const openEditRowModal = (row: FlatSasaranRow, groupNumber: number) => {
     const matchedGoal = strategicGoals.find(
       (g) =>
-        g.id === row.strategicGoalId ||
-        g.name.toLowerCase() === row.strategicGoal.toLowerCase(),
+        (row.strategicGoalId && g.id === row.strategicGoalId) ||
+        g.name.trim().toLowerCase() === row.strategicGoal.trim().toLowerCase(),
     )
     setModalError("")
     setModalState({
       mode: "edit",
-      criteriaId: row.criteriaId,
-      strategyId: row.strategyId,
-      programId: row.programId,
+      groupNumber,
+      rowIndex: row.rowIndex,
       sasaranId: row.sasaranId,
       strategicGoalId: matchedGoal?.id ?? row.strategicGoalId,
       strategicGoal: matchedGoal?.name ?? row.strategicGoal,
@@ -426,7 +415,9 @@ export function InputSasaranKinerja({
 
     if (!saveAsPersistentDraft) {
       if (!goalName) {
-        setModalError("Pilih Sasaran Strategis dari daftar pilihan terlebih dahulu.")
+        setModalError(
+          "Pilih Sasaran Strategis dari daftar pilihan terlebih dahulu.",
+        )
         return
       }
       if (!progName) {
@@ -449,170 +440,119 @@ export function InputSasaranKinerja({
       return
     }
 
-    const buildSasaranObj = (existingId?: string) => {
-      const base = createEmptySasaran()
-      const id = existingId || base.id
-      return {
-        id,
-        sasaran: sasText,
-        bulan_mulai: bMulai,
-        bulan_selesai: bSelesai,
+    const matchedGoal = strategicGoals.find(
+      (g) =>
+        (modalState.strategicGoalId && g.id === modalState.strategicGoalId) ||
+        g.name.trim().toLowerCase() === goalName.toLowerCase(),
+    )
+    const resolvedGoalId = matchedGoal?.id ?? modalState.strategicGoalId
+    const resolvedGoalName = matchedGoal?.name ?? goalName
+
+    const currentRows = extractFlatSasaranRows(criteria)
+    const norm = (val: string) => val.trim().replace(/\s+/g, " ").toLowerCase()
+    const goalKey = norm(resolvedGoalName)
+    const progKey = norm(progName)
+
+    let nextFlatRows: FlatSasaranInputRow[]
+
+    if (
+      modalState.mode === "edit" &&
+      typeof modalState.rowIndex === "number" &&
+      modalState.rowIndex >= 0 &&
+      modalState.rowIndex < currentRows.length
+    ) {
+      const targetRow = currentRows[modalState.rowIndex]
+      const sameGoal = norm(targetRow.strategicGoal) === goalKey
+      const sameProg = norm(targetRow.programName) === progKey
+      const updatedEntry: FlatSasaranInputRow = {
+        criteriaId: sameGoal ? targetRow.criteriaId : undefined,
+        strategyId: sameGoal ? targetRow.strategyId : undefined,
+        strategicGoalId: resolvedGoalId,
+        strategicGoal: resolvedGoalName,
+        programId: sameGoal && sameProg ? targetRow.programId : undefined,
+        programName: progName,
+        sasaranId: modalState.sasaranId || targetRow.sasaranId,
+        sasaranText: sasText,
+        bulanMulai: bMulai,
+        bulanSelesai: bSelesai,
         keterangan: ket,
-        target: sasText,
-        monthStart: bMulai,
-        monthEnd: bSelesai,
-        notes: ket,
       }
+      nextFlatRows = currentRows.map((item, idx) =>
+        idx === modalState.rowIndex ? updatedEntry : item,
+      )
+    } else if (
+      modalState.mode === "addSasaranToProgram" &&
+      typeof modalState.rowIndex === "number" &&
+      modalState.rowIndex >= 0 &&
+      modalState.rowIndex < currentRows.length
+    ) {
+      const baseRow = currentRows[modalState.rowIndex]
+      const sameGoal = norm(baseRow.strategicGoal) === goalKey
+      const sameProg = norm(baseRow.programName) === progKey
+      const newEntry: FlatSasaranInputRow = {
+        criteriaId: sameGoal ? baseRow.criteriaId : undefined,
+        strategyId: sameGoal ? baseRow.strategyId : undefined,
+        strategicGoalId: resolvedGoalId,
+        strategicGoal: resolvedGoalName,
+        programId: sameGoal && sameProg ? baseRow.programId : undefined,
+        programName: progName,
+        sasaranId: createEmptySasaran().id,
+        sasaranText: sasText,
+        bulanMulai: bMulai,
+        bulanSelesai: bSelesai,
+        keterangan: ket,
+      }
+      let insertAt = modalState.rowIndex + 1
+      if (sameGoal && sameProg) {
+        while (
+          insertAt < currentRows.length &&
+          norm(currentRows[insertAt].strategicGoal) === goalKey &&
+          norm(currentRows[insertAt].programName) === progKey
+        ) {
+          insertAt += 1
+        }
+      }
+      nextFlatRows = insertItemAt(currentRows, insertAt, newEntry)
+    } else {
+      const newEntry: FlatSasaranInputRow = {
+        strategicGoalId: resolvedGoalId,
+        strategicGoal: resolvedGoalName,
+        programName: progName,
+        sasaranId: createEmptySasaran().id,
+        sasaranText: sasText,
+        bulanMulai: bMulai,
+        bulanSelesai: bSelesai,
+        keterangan: ket,
+      }
+
+      let insertAt = currentRows.length
+      if (goalKey && progKey) {
+        let lastMatchingGoalProg = -1
+        let lastMatchingGoal = -1
+        for (let i = 0; i < currentRows.length; i++) {
+          if (norm(currentRows[i].strategicGoal) === goalKey) {
+            lastMatchingGoal = i
+            if (norm(currentRows[i].programName) === progKey) {
+              lastMatchingGoalProg = i
+            }
+          }
+        }
+        if (lastMatchingGoalProg >= 0) {
+          insertAt = lastMatchingGoalProg + 1
+          newEntry.criteriaId = currentRows[lastMatchingGoalProg].criteriaId
+          newEntry.strategyId = currentRows[lastMatchingGoalProg].strategyId
+          newEntry.programId = currentRows[lastMatchingGoalProg].programId
+        } else if (lastMatchingGoal >= 0) {
+          insertAt = lastMatchingGoal + 1
+          newEntry.criteriaId = currentRows[lastMatchingGoal].criteriaId
+          newEntry.strategyId = currentRows[lastMatchingGoal].strategyId
+        }
+      }
+
+      nextFlatRows = insertItemAt(currentRows, insertAt, newEntry)
     }
 
-    let nextCriteria: CriteriaItem[] = structuredClone(criteria)
-
-    if (modalState.mode === "create") {
-      const newSas = buildSasaranObj()
-      let targetCrit = nextCriteria.find((c) => {
-        const strat = getStrategies(c)[0]
-        return (
-          (modalState.strategicGoalId &&
-            strat?.strategicGoalId === modalState.strategicGoalId) ||
-          (goalName &&
-            (strat?.name.trim().toLowerCase() === goalName.toLowerCase() ||
-              c.name.trim().toLowerCase() === goalName.toLowerCase()))
-        )
-      })
-
-      if (!targetCrit) {
-        const strat = createEmptyStrategy()
-        strat.strategicGoalId = modalState.strategicGoalId
-        strat.name = goalName
-        const prog = createEmptyWorkProgram()
-        prog.name = progName
-        prog.sasaranList = [newSas]
-        prog.targets = [
-          {
-            id: newSas.id,
-            target: newSas.sasaran,
-            monthStart: newSas.bulan_mulai,
-            monthEnd: newSas.bulan_selesai,
-            notes: newSas.keterangan,
-          },
-        ]
-        strat.programs = [prog]
-        targetCrit = {
-          ...createEmptyCriteria(),
-          name: goalName,
-          strategy: strat,
-          strategies: [strat],
-        }
-        nextCriteria = [...nextCriteria, targetCrit]
-      } else {
-        const strat = getStrategies(targetCrit)[0]
-        const existingProg = strat.programs.find(
-          (p) =>
-            progName &&
-            p.name.trim().toLowerCase() === progName.toLowerCase(),
-        )
-        if (existingProg) {
-          const list = [...getProgramSasaran(existingProg), newSas]
-          existingProg.sasaranList = list
-          existingProg.targets = list.map((s) => ({
-            id: s.id,
-            target: s.sasaran,
-            monthStart: s.bulan_mulai,
-            monthEnd: s.bulan_selesai,
-            notes: s.keterangan,
-          }))
-        } else {
-          const prog = createEmptyWorkProgram()
-          prog.name = progName
-          prog.sasaranList = [newSas]
-          prog.targets = [
-            {
-              id: newSas.id,
-              target: newSas.sasaran,
-              monthStart: newSas.bulan_mulai,
-              monthEnd: newSas.bulan_selesai,
-              notes: newSas.keterangan,
-            },
-          ]
-          strat.programs.push(prog)
-        }
-        targetCrit.strategies = [strat]
-        targetCrit.strategy = strat
-      }
-    } else if (modalState.mode === "addSasaranToProgram") {
-      const newSas = buildSasaranObj()
-      nextCriteria = nextCriteria.map((crit) => {
-        if (crit.id !== modalState.criteriaId) return crit
-        const strategies = getStrategies(crit).map((strat) => {
-          if (strat.id !== modalState.strategyId) return strat
-          return {
-            ...strat,
-            strategicGoalId: modalState.strategicGoalId,
-            name: goalName || strat.name,
-            programs: strat.programs.map((prog) => {
-              if (prog.id !== modalState.programId) return prog
-              const list = [...getProgramSasaran(prog), newSas]
-              return {
-                ...prog,
-                name: progName || prog.name,
-                sasaranList: list,
-                targets: list.map((s) => ({
-                  id: s.id,
-                  target: s.sasaran,
-                  monthStart: s.bulan_mulai,
-                  monthEnd: s.bulan_selesai,
-                  notes: s.keterangan,
-                })),
-              }
-            }),
-          }
-        })
-        return {
-          ...crit,
-          name: goalName || crit.name,
-          strategies,
-          strategy: strategies[0],
-        }
-      })
-    } else if (modalState.mode === "edit") {
-      const updatedSas = buildSasaranObj(modalState.sasaranId)
-      nextCriteria = nextCriteria.map((crit) => {
-        if (crit.id !== modalState.criteriaId) return crit
-        const strategies = getStrategies(crit).map((strat) => {
-          if (strat.id !== modalState.strategyId) return strat
-          return {
-            ...strat,
-            strategicGoalId: modalState.strategicGoalId,
-            name: goalName,
-            programs: strat.programs.map((prog) => {
-              if (prog.id !== modalState.programId) return prog
-              const list = getProgramSasaran(prog).map((s) =>
-                s.id === modalState.sasaranId ? updatedSas : s,
-              )
-              return {
-                ...prog,
-                name: progName,
-                sasaranList: list,
-                targets: list.map((s) => ({
-                  id: s.id,
-                  target: s.sasaran,
-                  monthStart: s.bulan_mulai,
-                  monthEnd: s.bulan_selesai,
-                  notes: s.keterangan,
-                })),
-              }
-            }),
-          }
-        })
-        return {
-          ...crit,
-          name: strategies[0]?.name || crit.name,
-          strategies,
-          strategy: strategies[0],
-        }
-      })
-    }
-
+    const nextCriteria = rebuildCriteriaFromFlatRows(nextFlatRows)
     setCriteria(nextCriteria)
     if (saveAsPersistentDraft) {
       persistDraftImmediate(
@@ -626,43 +566,9 @@ export function InputSasaranKinerja({
   }
 
   const removeFlatRow = (row: FlatSasaranRow) => {
-    setCriteria((prev) => {
-      const next = prev
-        .map((crit) => {
-          if (crit.id !== row.criteriaId) return crit
-          const strategies = getStrategies(crit)
-            .map((strat) => {
-              if (strat.id !== row.strategyId) return strat
-              const programs = strat.programs
-                .map((prog) => {
-                  if (prog.id !== row.programId) return prog
-                  const remaining = getProgramSasaran(prog).filter(
-                    (s) => s.id !== row.sasaranId,
-                  )
-                  if (remaining.length === 0) return null
-                  return {
-                    ...prog,
-                    sasaranList: remaining,
-                    targets: remaining.map((s) => ({
-                      id: s.id,
-                      target: s.sasaran,
-                      monthStart: s.bulan_mulai,
-                      monthEnd: s.bulan_selesai,
-                      notes: s.keterangan,
-                    })),
-                  }
-                })
-                .filter((p): p is NonNullable<typeof p> => Boolean(p))
-              if (programs.length === 0) return null
-              return { ...strat, programs }
-            })
-            .filter((s): s is NonNullable<typeof s> => Boolean(s))
-          if (strategies.length === 0) return null
-          return { ...crit, strategies, strategy: strategies[0] }
-        })
-        .filter((c): c is NonNullable<typeof c> => Boolean(c))
-      return next
-    })
+    const currentRows = extractFlatSasaranRows(criteria)
+    const remaining = currentRows.filter((_, idx) => idx !== row.rowIndex)
+    setCriteria(rebuildCriteriaFromFlatRows(remaining))
   }
 
   const completeness =
@@ -717,8 +623,15 @@ export function InputSasaranKinerja({
       return false
     }
 
-    const uniqueGoals = new Set(flatRows.map((r) => r.strategicGoal)).size
-    const uniquePrograms = new Set(flatRows.map((r) => r.programId)).size
+    const uniqueGoals = new Set(
+      flatRows.map((r) => r.strategicGoal.trim().toLowerCase()),
+    ).size
+    const uniquePrograms = new Set(
+      flatRows.map(
+        (r) =>
+          `${r.strategicGoal.trim().toLowerCase()}||${r.programName.trim().toLowerCase()}`,
+      ),
+    ).size
 
     setConfirmInfo({
       title: "Konfirmasi Pengiriman Sasaran Kinerja",
@@ -825,9 +738,7 @@ export function InputSasaranKinerja({
       <div className="report-heading">
         <div>
           <div className="report-kicker">TAHAP 1 WAJIB · PERENCANAAN TAHUNAN</div>
-          <div className="report-title">
-            Sasaran Kinerja Tahun {draftYear}
-          </div>
+          <div className="report-title">Sasaran Kinerja Tahun {draftYear}</div>
         </div>
         <div className="draft-save-info">
           <div className={statusClass}>
@@ -1014,8 +925,9 @@ export function InputSasaranKinerja({
             <h2>Tabel Sasaran Kinerja Unit (6 Kolom Resmi)</h2>
             <p>
               Pilihan <strong>Sasaran Strategis</strong> dikelola terpusat oleh
-              Admin/Renbang. Klik baris atau tombol aksi untuk menambah maupun
-              memperbarui data melalui jendela pop-up.
+              Admin/Renbang. Sel yang memiliki Sasaran Strategis atau Program
+              Kerja sama digabung otomatis, namun setiap baris tetap dapat
+              diubah mandiri.
             </p>
           </div>
           <div className="matrix-grid-toolbar-actions">
@@ -1031,7 +943,7 @@ export function InputSasaranKinerja({
           </div>
         </div>
 
-        <div className="official-grid-scroll">
+        <div className="official-grid-scroll" data-lenis-prevent>
           <table className="sasaran-green-table">
             <thead>
               <tr>
@@ -1072,26 +984,44 @@ export function InputSasaranKinerja({
                   </td>
                 </tr>
               ) : (
-                flatRows.map((row) => {
+                flatRows.map((row, idx) => {
+                  const span = mergeSpans[idx]
                   const rowInvalid = attempted && !row.isComplete
                   return (
                     <tr
-                      key={`${row.programId}-${row.sasaranId}`}
+                      key={`${row.sasaranId}-${row.rowNumber}`}
                       className={[
                         "matrix-clickable-row",
                         rowInvalid && "is-row-invalid",
                       ]
                         .filter(Boolean)
                         .join(" ")}
-                      onClick={() => openEditRowModal(row)}
+                      onClick={() => openEditRowModal(row, span.groupNumber)}
                     >
-                      <td className="col-no">{row.rowNumber}</td>
-                      <td className="col-goal">
-                        <strong>{row.strategicGoal || "-"}</strong>
-                      </td>
-                      <td className="col-program">
-                        <span>{row.programName || "-"}</span>
-                      </td>
+                      {span.noSpan > 0 && (
+                        <td
+                          className="col-no is-merged-cell"
+                          rowSpan={span.noSpan}
+                        >
+                          {span.groupNumber}
+                        </td>
+                      )}
+                      {span.goalSpan > 0 && (
+                        <td
+                          className="col-goal is-merged-cell"
+                          rowSpan={span.goalSpan}
+                        >
+                          <strong>{row.strategicGoal || "-"}</strong>
+                        </td>
+                      )}
+                      {span.programSpan > 0 && (
+                        <td
+                          className="col-program is-merged-cell"
+                          rowSpan={span.programSpan}
+                        >
+                          <span>{row.programName || "-"}</span>
+                        </td>
+                      )}
                       <td className="col-sasaran">
                         <span>{row.sasaranText || "-"}</span>
                       </td>
@@ -1114,22 +1044,26 @@ export function InputSasaranKinerja({
                           <button
                             type="button"
                             className="matrix-btn-edit"
-                            onClick={() => openEditRowModal(row)}
+                            onClick={() =>
+                              openEditRowModal(row, span.groupNumber)
+                            }
                           >
                             Edit
                           </button>
                           <button
                             type="button"
                             className="matrix-btn-sub"
-                            title="Tambah sasaran lain pada program ini"
-                            onClick={() => openAddSasaranToProgram(row)}
+                            title={`Tambah sasaran kinerja pada Program Kerja No. ${span.groupNumber}`}
+                            onClick={() =>
+                              openAddSasaranToProgram(row, span.groupNumber)
+                            }
                           >
                             + Sasaran
                           </button>
                           <button
                             type="button"
                             className="matrix-btn-delete"
-                            aria-label={`Hapus baris ${row.rowNumber}`}
+                            aria-label={`Hapus sasaran pada nomor ${span.groupNumber}`}
                             onClick={() => removeFlatRow(row)}
                           >
                             <Icon name="trash" size={14} />
@@ -1178,246 +1112,350 @@ export function InputSasaranKinerja({
         </div>
       </div>
 
-      {modalState && (
-        <div
-          className="submit-success-overlay sasaran-row-modal-overlay"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="sasaran-modal-title"
-        >
-          <div className="triwulan-row-modal">
-            <header className="triwulan-row-modal-head">
-              <div>
-                <span className="triwulan-modal-kicker">
-                  UNIT {lockedOrg.unitLabel.toUpperCase()} · TAHUN {draftYear}
-                </span>
-                <h2 id="sasaran-modal-title">
-                  {modalState.mode === "edit"
-                    ? "Perbarui Baris Sasaran Kinerja"
-                    : modalState.mode === "addSasaranToProgram"
-                      ? "Tambah Sasaran pada Program Kerja"
-                      : "Tambah Program & Sasaran Kinerja"}
-                </h2>
-              </div>
-              <button
-                type="button"
-                className="triwulan-modal-close"
-                aria-label="Tutup jendela pengisian"
-                onClick={() => {
-                  setModalState(null)
-                  setModalError("")
-                }}
-              >
-                ×
-              </button>
-            </header>
-
-            <div className="triwulan-row-modal-body">
-              {modalError && (
-                <div className="login-error" role="alert">
-                  <span aria-hidden="true">!</span>
-                  <span>{modalError}</span>
+      <AnimatePresence>
+        {modalState && (
+          <motion.div
+            className="submit-success-overlay sasaran-row-modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sasaran-modal-title"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+          >
+            <motion.div
+              className="triwulan-row-modal"
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 12, scale: 0.98 }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <header className="triwulan-row-modal-head">
+                <div>
+                  <span className="triwulan-modal-kicker">
+                    UNIT {lockedOrg.unitLabel.toUpperCase()} · TAHUN {draftYear}
+                  </span>
+                  <h2 id="sasaran-modal-title">
+                    {modalState.mode === "edit"
+                      ? `Perbarui Sasaran pada Baris No. ${modalState.groupNumber ?? 1}`
+                      : modalState.mode === "addSasaranToProgram"
+                        ? `Tambah Sasaran pada Program Kerja (No. ${modalState.groupNumber ?? 1})`
+                        : "Tambah Program & Sasaran Kinerja Baru"}
+                  </h2>
                 </div>
-              )}
-
-              <label className="modal-form-field" htmlFor="modal-strategic-goal">
-                <span>
-                  Sasaran Strategis <b>*</b>{" "}
-                  <small>(Dikelola Admin / Renbang)</small>
-                </span>
-                <select
-                  id="modal-strategic-goal"
-                  name="strategicGoal"
-                  value={modalState.strategicGoal}
-                  disabled={modalState.mode === "addSasaranToProgram"}
-                  onChange={(e) => {
-                    const selectedName = e.target.value
-                    const found = strategicGoals.find(
-                      (g) => g.name === selectedName,
-                    )
-                    setModalState((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            strategicGoalId: found?.id ?? "",
-                            strategicGoal: selectedName,
-                          }
-                        : prev,
-                    )
+                <button
+                  type="button"
+                  className="triwulan-modal-close"
+                  aria-label="Tutup jendela pengisian"
+                  onClick={() => {
+                    setModalState(null)
+                    setModalError("")
                   }}
                 >
-                  <option value="">-- Pilih Sasaran Strategis --</option>
-                  {strategicGoals.map((goal) => (
-                    <option key={goal.id} value={goal.name}>
-                      [{goal.code}] {goal.name}
-                    </option>
-                  ))}
-                  {modalState.strategicGoal &&
-                    !strategicGoals.some(
-                      (g) => g.name === modalState.strategicGoal,
-                    ) && (
-                      <option value={modalState.strategicGoal}>
-                        {modalState.strategicGoal}
-                      </option>
+                  ×
+                </button>
+              </header>
+
+              <div className="triwulan-row-modal-body" data-lenis-prevent>
+                {modalError && (
+                  <div className="login-error" role="alert">
+                    <span aria-hidden="true">!</span>
+                    <span>{modalError}</span>
+                  </div>
+                )}
+
+                {modalState.mode === "addSasaranToProgram" ? (
+                  <div className="locked-program-context-box">
+                    <div className="locked-program-context-head">
+                      <span className="locked-program-badge">
+                        <Icon name="lock" size={13} />
+                        <span>
+                          Terkunci pada Baris No. {modalState.groupNumber ?? 1}{" "}
+                          (Satu Baris Merge Cell)
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        className="switch-new-row-btn"
+                        onClick={() =>
+                          setModalState((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  mode: "create",
+                                  groupNumber: undefined,
+                                  rowIndex: undefined,
+                                }
+                              : prev,
+                          )
+                        }
+                      >
+                        Buat Nomor Baru?
+                      </button>
+                    </div>
+                    <div className="inherited-rka-summary">
+                      <div>
+                        <span>No. Baris Program</span>
+                        <strong>
+                          No. {modalState.groupNumber ?? 1} (Menyatu Otomatis)
+                        </strong>
+                      </div>
+                      <div>
+                        <span>Program Kerja (Terkunci)</span>
+                        <strong>{modalState.programName || "-"}</strong>
+                      </div>
+                      <div style={{ gridColumn: "1 / -1" }}>
+                        <span>Sasaran Strategis (Terkunci)</span>
+                        <strong>{modalState.strategicGoal || "-"}</strong>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {modalState.mode === "edit" && (
+                      <div className="modal-row-scope-hint">
+                        <Icon name="layers" size={15} />
+                        <span>
+                          Perubahan Sasaran Strategis atau Program Kerja pada
+                          jendela ini hanya berlaku untuk item sasaran ini dan
+                          tidak menimpa sasaran lain.
+                        </span>
+                      </div>
                     )}
-                </select>
-              </label>
 
-              <label className="modal-form-field" htmlFor="modal-program-kerja">
-                <span>
-                  Program Kerja <b>*</b>
-                </span>
-                <input
-                  id="modal-program-kerja"
-                  name="programName"
-                  type="text"
-                  placeholder="Ketik nama program kerja tahunan unit..."
-                  value={modalState.programName}
-                  readOnly={modalState.mode === "addSasaranToProgram"}
-                  onChange={(e) =>
-                    setModalState((prev) =>
-                      prev ? { ...prev, programName: e.target.value } : prev,
-                    )
-                  }
-                />
-              </label>
+                    <label
+                      className="modal-form-field"
+                      htmlFor="modal-strategic-goal"
+                    >
+                      <span>
+                        Sasaran Strategis <b>*</b>{" "}
+                        <small>(Dikelola Admin / Renbang)</small>
+                      </span>
+                      <select
+                        id="modal-strategic-goal"
+                        name="strategicGoal"
+                        value={modalState.strategicGoal}
+                        onChange={(e) => {
+                          const selectedName = e.target.value
+                          const found = strategicGoals.find(
+                            (g) => g.name === selectedName,
+                          )
+                          setModalState((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  strategicGoalId: found?.id ?? "",
+                                  strategicGoal: selectedName,
+                                }
+                              : prev,
+                          )
+                        }}
+                      >
+                        <option value="">-- Pilih Sasaran Strategis --</option>
+                        {strategicGoals.map((goal) => (
+                          <option key={goal.id} value={goal.name}>
+                            [{goal.code}] {goal.name}
+                          </option>
+                        ))}
+                        {modalState.strategicGoal &&
+                          !strategicGoals.some(
+                            (g) => g.name === modalState.strategicGoal,
+                          ) && (
+                            <option value={modalState.strategicGoal}>
+                              {modalState.strategicGoal}
+                            </option>
+                          )}
+                      </select>
+                    </label>
 
-              <label className="modal-form-field" htmlFor="modal-sasaran-text">
-                <span>
-                  Sasaran Kinerja <b>*</b>
-                </span>
-                <textarea
-                  id="modal-sasaran-text"
-                  name="sasaranText"
-                  rows={3}
-                  placeholder="Tuliskan indikator atau target capaian sasaran kinerja..."
-                  value={modalState.sasaranText}
-                  onChange={(e) =>
-                    setModalState((prev) =>
-                      prev ? { ...prev, sasaranText: e.target.value } : prev,
-                    )
-                  }
-                />
-              </label>
-
-              <div className="modal-form-two-col">
-                <label className="modal-form-field" htmlFor="modal-bulan-mulai">
-                  <span>
-                    Bulan Mulai Pelaksanaan <b>*</b>
-                  </span>
-                  <input
-                    id="modal-bulan-mulai"
-                    name="bulanMulai"
-                    type="month"
-                    min={`${draftYear}-01`}
-                    max={`${draftYear}-12`}
-                    value={modalState.bulanMulai}
-                    onChange={(e) =>
-                      setModalState((prev) =>
-                        prev ? { ...prev, bulanMulai: e.target.value } : prev,
-                      )
-                    }
-                  />
-                </label>
+                    <label
+                      className="modal-form-field"
+                      htmlFor="modal-program-kerja"
+                    >
+                      <span>
+                        Program Kerja <b>*</b>
+                      </span>
+                      <input
+                        id="modal-program-kerja"
+                        name="programName"
+                        type="text"
+                        list="existing-program-kerja-list"
+                        placeholder="Ketik nama program kerja tahunan unit..."
+                        value={modalState.programName}
+                        onChange={(e) =>
+                          setModalState((prev) =>
+                            prev
+                              ? { ...prev, programName: e.target.value }
+                              : prev,
+                          )
+                        }
+                      />
+                      {existingProgramSuggestions.length > 0 && (
+                        <datalist id="existing-program-kerja-list">
+                          {existingProgramSuggestions.map((prog) => (
+                            <option key={prog} value={prog} />
+                          ))}
+                        </datalist>
+                      )}
+                    </label>
+                  </>
+                )}
 
                 <label
                   className="modal-form-field"
-                  htmlFor="modal-bulan-selesai"
+                  htmlFor="modal-sasaran-text"
                 >
                   <span>
-                    Bulan Selesai Pelaksanaan <small>(Opsional)</small>
+                    Sasaran Kinerja <b>*</b>
                   </span>
-                  <input
-                    id="modal-bulan-selesai"
-                    name="bulanSelesai"
-                    type="month"
-                    min={modalState.bulanMulai || `${draftYear}-01`}
-                    max={`${draftYear}-12`}
-                    value={modalState.bulanSelesai}
+                  <textarea
+                    id="modal-sasaran-text"
+                    name="sasaranText"
+                    rows={3}
+                    autoFocus={modalState.mode === "addSasaranToProgram"}
+                    placeholder="Tuliskan indikator atau target capaian sasaran kinerja..."
+                    value={modalState.sasaranText}
                     onChange={(e) =>
                       setModalState((prev) =>
-                        prev ? { ...prev, bulanSelesai: e.target.value } : prev,
+                        prev ? { ...prev, sasaranText: e.target.value } : prev,
+                      )
+                    }
+                  />
+                </label>
+
+                <div className="modal-form-two-col">
+                  <label
+                    className="modal-form-field"
+                    htmlFor="modal-bulan-mulai"
+                  >
+                    <span>
+                      Bulan Mulai Pelaksanaan <b>*</b>
+                    </span>
+                    <input
+                      id="modal-bulan-mulai"
+                      name="bulanMulai"
+                      type="month"
+                      min={`${draftYear}-01`}
+                      max={`${draftYear}-12`}
+                      value={modalState.bulanMulai}
+                      onChange={(e) =>
+                        setModalState((prev) =>
+                          prev ? { ...prev, bulanMulai: e.target.value } : prev,
+                        )
+                      }
+                    />
+                  </label>
+
+                  <label
+                    className="modal-form-field"
+                    htmlFor="modal-bulan-selesai"
+                  >
+                    <span>
+                      Bulan Selesai Pelaksanaan <small>(Opsional)</small>
+                    </span>
+                    <input
+                      id="modal-bulan-selesai"
+                      name="bulanSelesai"
+                      type="month"
+                      min={modalState.bulanMulai || `${draftYear}-01`}
+                      max={`${draftYear}-12`}
+                      value={modalState.bulanSelesai}
+                      onChange={(e) =>
+                        setModalState((prev) =>
+                          prev
+                            ? { ...prev, bulanSelesai: e.target.value }
+                            : prev,
+                        )
+                      }
+                    />
+                  </label>
+                </div>
+
+                <label className="modal-form-field" htmlFor="modal-keterangan">
+                  <span>Keterangan</span>
+                  <textarea
+                    id="modal-keterangan"
+                    name="keterangan"
+                    rows={2}
+                    placeholder="Catatan tambahan pelaksanaan atau target..."
+                    value={modalState.keterangan}
+                    onChange={(e) =>
+                      setModalState((prev) =>
+                        prev ? { ...prev, keterangan: e.target.value } : prev,
                       )
                     }
                   />
                 </label>
               </div>
 
-              <label className="modal-form-field" htmlFor="modal-keterangan">
-                <span>Keterangan</span>
-                <textarea
-                  id="modal-keterangan"
-                  name="keterangan"
-                  rows={2}
-                  placeholder="Catatan tambahan pelaksanaan atau target..."
-                  value={modalState.keterangan}
-                  onChange={(e) =>
-                    setModalState((prev) =>
-                      prev ? { ...prev, keterangan: e.target.value } : prev,
-                    )
-                  }
-                />
-              </label>
-            </div>
-
-            <footer className="triwulan-row-modal-foot">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => {
-                  setModalState(null)
-                  setModalError("")
-                }}
-              >
-                Batal
-              </button>
-              <div className="triwulan-modal-foot-right">
+              <footer className="triwulan-row-modal-foot">
                 <button
                   type="button"
                   className="secondary-button"
-                  onClick={() => applyModalChanges(true)}
+                  onClick={() => {
+                    setModalState(null)
+                    setModalError("")
+                  }}
                 >
-                  Simpan Draf
+                  Batal
                 </button>
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => applyModalChanges(false)}
-                >
-                  <Icon name="check" size={15} />
-                  <span>Simpan Baris</span>
-                </button>
-              </div>
-            </footer>
-          </div>
-          <button
-            type="button"
-            className="overlay-close"
-            aria-label="Tutup jendela pengisian"
-            onClick={() => {
-              setModalState(null)
-              setModalError("")
-            }}
-          />
-        </div>
-      )}
+                <div className="triwulan-modal-foot-right">
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => applyModalChanges(true)}
+                  >
+                    Simpan Draf
+                  </button>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => applyModalChanges(false)}
+                  >
+                    <Icon name="check" size={15} />
+                    <span>Simpan Baris</span>
+                  </button>
+                </div>
+              </footer>
+            </motion.div>
+            <button
+              type="button"
+              className="overlay-close"
+              aria-label="Tutup jendela pengisian"
+              onClick={() => {
+                setModalState(null)
+                setModalError("")
+              }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <DetailModal
         record={previewRecord}
         isDraftPreview
         onClose={() => setPreviewOpen(false)}
+        onExportExcel={(rec) => notify(exportRecordExcel(rec))}
         onPrintPreview={(rec) => {
           setPreviewOpen(false)
           setPrintPreviewRecord(rec)
         }}
       />
+
       <PrintPreviewModal
         record={printPreviewRecord}
         onClose={() => setPrintPreviewRecord(null)}
+        headerTitle={`Pratinjau Cetak Sasaran Kinerja (${draftYear})`}
+        headerSubtitle="Format Resmi 6 Kolom Hijau · A4 Landscape"
         confirmSubmitLabel="Kirim Sasaran"
-        confirmSubmitDisabled={isPeriodLocked}
-        onConfirmSubmit={requestSubmit}
+        confirmSubmitDisabled={isPeriodLocked || incomplete}
+        confirmSubmitTitle={isPeriodLocked ? lockReason : undefined}
+        onConfirmSubmit={() => {
+          requestSubmit()
+        }}
       />
+
       <SubmitConfirmModal
         info={confirmInfo}
         onCancel={() => setConfirmInfo(null)}
@@ -1425,12 +1463,18 @@ export function InputSasaranKinerja({
       />
       <SubmitSuccessModal
         info={successInfo}
-        onClose={() => {
-          setSuccessInfo(null)
-          onViewHistory?.()
-        }}
+        onClose={() => setSuccessInfo(null)}
+        onViewHistory={
+          onViewHistory
+            ? () => {
+                setSuccessInfo(null)
+                onViewHistory()
+              }
+            : undefined
+        }
       />
     </div>
   )
 }
+
 export default InputSasaranKinerja

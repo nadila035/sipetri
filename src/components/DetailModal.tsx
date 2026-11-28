@@ -1,8 +1,11 @@
 import { AnnualSourceSummary } from "./AnnualSourceSummary"
 import { useReporting } from "../ReportingContext"
 import { formatUpdatedAtLabel } from "../utils/drafts"
-import { formatBulanPelaksanaan, getTriwulanData } from "../utils/format"
-import { getSasaranKinerjaReviewCriteria } from "../utils/review"
+import {
+  computeTableMergeSpans,
+  getSasaranKinerjaDisplayRows,
+  getTriwulanDisplayRows,
+} from "../utils/format"
 import { useDialog } from "../utils/useDialog"
 import { Icon } from "./Icon"
 import type { HistoryRecord } from "../types"
@@ -35,9 +38,9 @@ export function DetailModal({
   isAdmin = false,
   canReview = true,
   onClose,
-  onCancelEditing = () => {},
-  onUpdateEdit = () => {},
-  onSaveRevision = () => {},
+  onCancelEditing = () => { },
+  onUpdateEdit = () => { },
+  onSaveRevision = () => { },
   onExportExcel,
   onPrintPreview,
   onOpenReview,
@@ -52,28 +55,50 @@ export function DetailModal({
   const strategicGoals = data.strategicGoals ?? []
 
   const renderEditableCell = (
-    itemIdx: number,
+    itemIndexes: number | number[],
     fallbackVal: string,
     ariaLabel: string,
     options?: {
       isStrategicGoal?: boolean
       isLink?: boolean
       centerText?: boolean
+      boldText?: boolean
     },
   ) => {
-    const item = itemIdx >= 0 ? record.items[itemIdx] : undefined
-    const val =
-      (itemIdx >= 0 ? edits[itemIdx] : undefined) ?? item?.value ?? fallbackVal
+    const idxList = (
+      Array.isArray(itemIndexes) ? itemIndexes : [itemIndexes]
+    ).filter((idx) => idx >= 0)
+    const primaryIdx = idxList[0] ?? -1
+    const flaggedIdx =
+      idxList.find((idx) => Boolean(record.items[idx]?.needsRevision)) ?? -1
+    const noteItem = idxList
+      .map((idx) => record.items[idx])
+      .find((it) => Boolean(it?.note))
 
-    if (canEdit && item?.needsRevision && itemIdx >= 0) {
+    const primaryItem = primaryIdx >= 0 ? record.items[primaryIdx] : undefined
+    const val =
+      (primaryIdx >= 0 ? edits[primaryIdx] : undefined) ??
+      primaryItem?.value ??
+      fallbackVal
+
+    const handleMultiUpdate = (nextValue: string) => {
+      const uniqueIndexes = Array.from(new Set(idxList))
+      for (const idx of uniqueIndexes) {
+        onUpdateEdit(idx, nextValue)
+      }
+    }
+
+    if (canEdit && flaggedIdx >= 0 && primaryIdx >= 0) {
       if (options?.isStrategicGoal && strategicGoals.length > 0) {
         return (
           <>
             <select
-              id={`detail-edit-${itemIdx}`}
+              id={`detail-edit-${primaryIdx}`}
+              name={`detailEdit[${primaryIdx}]`}
+              className="detail-revision-select"
               aria-label={ariaLabel}
               value={val}
-              onChange={(e) => onUpdateEdit(itemIdx, e.target.value)}
+              onChange={(e) => handleMultiUpdate(e.target.value)}
             >
               {strategicGoals.map((g) => (
                 <option key={g.id} value={g.name}>
@@ -84,10 +109,10 @@ export function DetailModal({
                 <option value={val}>{val}</option>
               )}
             </select>
-            {item.note && (
+            {noteItem?.note && (
               <div className="cell-note">
                 <strong>Catatan:</strong>
-                {item.note}
+                {noteItem.note}
               </div>
             )}
           </>
@@ -96,17 +121,17 @@ export function DetailModal({
       return (
         <>
           <textarea
-            id={`detail-edit-${itemIdx}`}
-            name={`detailEdit[${itemIdx}]`}
+            id={`detail-edit-${primaryIdx}`}
+            name={`detailEdit[${primaryIdx}]`}
             aria-label={ariaLabel}
             style={options?.centerText ? { textAlign: "center" } : undefined}
             value={val}
-            onChange={(e) => onUpdateEdit(itemIdx, e.target.value)}
+            onChange={(e) => handleMultiUpdate(e.target.value)}
           />
-          {item.note && (
+          {noteItem?.note && (
             <div className="cell-note">
               <strong>Catatan:</strong>
-              {item.note}
+              {noteItem.note}
             </div>
           )}
         </>
@@ -126,14 +151,19 @@ export function DetailModal({
             {trimmed}
           </a>
         ) : (
-          <p style={options?.centerText ? { textAlign: "center" } : undefined}>
+          <p
+            style={{
+              ...(options?.centerText ? { textAlign: "center" } : {}),
+              ...(options?.boldText ? { fontWeight: 700 } : {}),
+            }}
+          >
             {trimmed || "-"}
           </p>
         )}
-        {item?.note && (
+        {noteItem?.note && (
           <div className="cell-note">
             <strong>Catatan:</strong>
-            {item.note}
+            {noteItem.note}
           </div>
         )}
       </>
@@ -174,7 +204,7 @@ export function DetailModal({
           </button>
         </div>
 
-        <div className="detail-scroll-body">
+        <div className="detail-scroll-body" data-lenis-prevent>
           <div className="detail-meta">
             <div>
               <span>Status</span>
@@ -224,22 +254,25 @@ export function DetailModal({
             <span>Rincian Tabel Dokumen</span>
             <b>
               {record.type === "Sasaran Kinerja"
-                ? "6 kolom (Format Resmi Hijau)"
-                : "13 kolom (Format Resmi Triwulan)"}
+                ? "6 kolom (Format Resmi Hijau · Merge Sel Otomatis)"
+                : "13 kolom (Format Resmi Triwulan · Merge Sel Otomatis)"}
             </b>
           </div>
 
           {record.type === "Sasaran Kinerja" ? (
             (() => {
-              const criteriaSlots = getSasaranKinerjaReviewCriteria(record)
-              let rowCounter = 0
+              const displayRows = getSasaranKinerjaDisplayRows(record)
+              const spans = computeTableMergeSpans(displayRows)
               return (
-                <div className="detail-table-wrap target-table-wrap">
+                <div
+                  className="detail-table-wrap target-table-wrap official-grid-scroll"
+                  data-lenis-prevent
+                >
                   <table className="detail-target-table sasaran-green-table">
                     <colgroup>
                       <col style={{ width: "48px" }} />
-                      <col style={{ width: "22%" }} />
-                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "23%" }} />
+                      <col style={{ width: "21%" }} />
                       <col style={{ width: "24%" }} />
                       <col style={{ width: "16%" }} />
                       <col style={{ width: "16%" }} />
@@ -257,102 +290,88 @@ export function DetailModal({
                       </tr>
                     </thead>
                     <tbody>
-                      {criteriaSlots.map((crit) =>
-                        crit.stratSlots.map((strat) => {
-                          const totalStratRows = strat.programSlots.reduce(
-                            (acc, p) =>
-                              acc + Math.max(1, p.sasaranSlots.length),
-                            0,
-                          )
-                          return strat.programSlots.map((prog, pIdx) => {
-                            const rows = prog.sasaranSlots.length
-                              ? prog.sasaranSlots
-                              : [
-                                  {
-                                    id: `${prog.id}-empty`,
-                                    sasaran: "-",
-                                    bulanMulai: "-",
-                                    bulanSelesai: "",
-                                    keterangan: "-",
-                                    sasaranItemIdx: -1,
-                                    bulanItemIdx: -1,
-                                    keteranganItemIdx: -1,
-                                  },
-                                ]
-                            const progRows = rows.length
+                      {displayRows.map((row, idx) => {
+                        const span = spans[idx]
+                        const coveredGoalIndexes =
+                          span.goalSpan > 0
+                            ? displayRows
+                              .slice(idx, span.goalEndIndex + 1)
+                              .map((r) => r.stratItemIdx)
+                            : []
+                        const coveredProgIndexes =
+                          span.programSpan > 0
+                            ? displayRows
+                              .slice(idx, span.programEndIndex + 1)
+                              .map((r) => r.progItemIdx)
+                            : []
 
-                            return rows.map((sas, sasIdx) => {
-                              rowCounter += 1
-                              const isFirstSasOfProg = sasIdx === 0
-                              const isFirstProgOfStrat =
-                                pIdx === 0 && isFirstSasOfProg
-                              const formattedBulan = formatBulanPelaksanaan(
-                                sas.bulanMulai,
-                                sas.bulanSelesai,
-                              )
-                              return (
-                                <tr key={`${prog.id}-${sas.id}`}>
-                                  <td
-                                    style={{
-                                      textAlign: "center",
-                                      verticalAlign: "top",
-                                      fontWeight: 700,
-                                    }}
-                                  >
-                                    {rowCounter}
-                                  </td>
-                                  {isFirstProgOfStrat && (
-                                    <td
-                                      rowSpan={totalStratRows}
-                                      style={{ verticalAlign: "top" }}
-                                    >
-                                      {renderEditableCell(
-                                        strat.stratItemIdx,
-                                        strat.name || crit.name || "-",
-                                        `Revisi Sasaran Strategis #${rowCounter}`,
-                                        { isStrategicGoal: true },
-                                      )}
-                                    </td>
-                                  )}
-                                  {isFirstSasOfProg && (
-                                    <td
-                                      rowSpan={progRows}
-                                      style={{ verticalAlign: "top" }}
-                                    >
-                                      {renderEditableCell(
-                                        prog.progItemIdx,
-                                        prog.name || "-",
-                                        `Revisi Program Kerja #${rowCounter}`,
-                                      )}
-                                    </td>
-                                  )}
-                                  <td style={{ verticalAlign: "top" }}>
-                                    {renderEditableCell(
-                                      sas.sasaranItemIdx,
-                                      sas.sasaran || "-",
-                                      `Revisi Sasaran Kinerja #${rowCounter}`,
-                                    )}
-                                  </td>
-                                  <td style={{ verticalAlign: "top" }}>
-                                    {renderEditableCell(
-                                      sas.bulanItemIdx,
-                                      formattedBulan,
-                                      `Revisi Bulan Pelaksanaan #${rowCounter}`,
-                                    )}
-                                  </td>
-                                  <td style={{ verticalAlign: "top" }}>
-                                    {renderEditableCell(
-                                      sas.keteranganItemIdx,
-                                      sas.keterangan || "-",
-                                      `Revisi Keterangan #${rowCounter}`,
-                                    )}
-                                  </td>
-                                </tr>
-                              )
-                            })
-                          })
-                        }),
-                      )}
+                        return (
+                          <tr key={row.key}>
+                            {span.noSpan > 0 && (
+                              <td
+                                rowSpan={span.noSpan}
+                                className="is-merged-cell"
+                                style={{
+                                  textAlign: "center",
+                                  verticalAlign: "top",
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {span.groupNumber}
+                              </td>
+                            )}
+                            {span.goalSpan > 0 && (
+                              <td
+                                rowSpan={span.goalSpan}
+                                className="is-merged-cell"
+                                style={{ verticalAlign: "top" }}
+                              >
+                                {renderEditableCell(
+                                  coveredGoalIndexes,
+                                  row.strategicGoal,
+                                  `Revisi Sasaran Strategis #${row.rowNumber}`,
+                                  { isStrategicGoal: true, boldText: true },
+                                )}
+                              </td>
+                            )}
+                            {span.programSpan > 0 && (
+                              <td
+                                rowSpan={span.programSpan}
+                                className="is-merged-cell"
+                                style={{ verticalAlign: "top" }}
+                              >
+                                {renderEditableCell(
+                                  coveredProgIndexes,
+                                  row.programName,
+                                  `Revisi Program Kerja #${row.rowNumber}`,
+                                )}
+                              </td>
+                            )}
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.sasaranItemIdx,
+                                row.sasaran,
+                                `Revisi Sasaran Kinerja #${row.rowNumber}`,
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.bulanItemIdx,
+                                row.bulanFormatted,
+                                `Revisi Bulan Pelaksanaan #${row.rowNumber}`,
+                                { centerText: true },
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.keteranganItemIdx,
+                                row.keterangan,
+                                `Revisi Keterangan #${row.rowNumber}`,
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -360,29 +379,32 @@ export function DetailModal({
             })()
           ) : (
             (() => {
-              const triwulanPrograms = getTriwulanData(record)
-              let rowCounter = 0
+              const displayRows = getTriwulanDisplayRows(record)
+              const spans = computeTableMergeSpans(displayRows)
               return (
                 <div
-                  className="detail-table-wrap target-table-wrap"
-                  style={{ overflowX: "auto" }}
+                  className="detail-table-wrap target-table-wrap official-grid-scroll"
+                  data-lenis-prevent
                 >
                   <table className="detail-triwulan-table triwulan-grid-table">
                     <thead>
                       <tr>
-                        <th className="th-blue sticky-no" style={{ width: "44px", textAlign: "center" }}>
+                        <th
+                          className="th-blue"
+                          style={{ width: "44px", textAlign: "center" }}
+                        >
                           No
                         </th>
                         <th className="th-blue">Sasaran Strategis</th>
-                        <th className="th-blue sticky-program">
-                          Program Kerja {docYear}
-                        </th>
+                        <th className="th-blue">Program Kerja {docYear}</th>
                         <th className="th-blue">Sasaran</th>
                         <th className="th-blue" style={{ textAlign: "center" }}>
                           BULAN PELAKSANAAN PROGRAM KERJA
                         </th>
                         <th className="th-blue">Tahap Pelaksanaan (Uraian)</th>
-                        <th className="th-blue">Realisasi Pelaksanaan (Uraian)</th>
+                        <th className="th-blue">
+                          Realisasi Pelaksanaan (Uraian)
+                        </th>
                         <th className="th-blue" style={{ textAlign: "center" }}>
                           Realisasi Pelaksanaan (%)
                         </th>
@@ -402,165 +424,162 @@ export function DetailModal({
                       </tr>
                     </thead>
                     <tbody>
-                      {triwulanPrograms.map((prog, pIdx) => {
-                        const totalSasRows = Math.max(
-                          1,
-                          prog.sasaranList.length,
-                        )
-                        return prog.sasaranList.map((sas, sIdx) => {
-                          rowCounter += 1
-                          const isFirstSas = sIdx === 0
-                          const stride = sas.stride ?? 12
-                          const baseIdx =
-                            sas.baseIdx ?? (rowCounter - 1) * stride
-                          const goalOff = stride === 12 ? 0 : -1
-                          const progOff = stride === 12 ? 1 : 0
-                          const sasOff = stride === 12 ? 2 : 1
-                          const monthOff = stride === 12 ? 3 : 2
-                          const stageOff = stride === 12 ? 4 : 3
-                          const realOff = stride === 12 ? 5 : 4
-                          const pctOff = stride === 12 ? 6 : 5
-                          const obsOff = stride === 12 ? 7 : 6
-                          const solOff = stride === 12 ? 8 : 7
-                          const solTimeOff = stride === 12 ? 9 : 8
-                          const noteOff = stride === 12 ? 10 : 9
-                          const evOff = stride === 12 ? 11 : 10
+                      {displayRows.map((row, idx) => {
+                        const span = spans[idx]
+                        const sas = row.sasaran
+                        const coveredGoalIndexes =
+                          span.goalSpan > 0
+                            ? displayRows
+                              .slice(idx, span.goalEndIndex + 1)
+                              .map((r) => r.goalItemIdx)
+                            : []
+                        const coveredProgIndexes =
+                          span.programSpan > 0
+                            ? displayRows
+                              .slice(idx, span.programEndIndex + 1)
+                              .map((r) => r.progItemIdx)
+                            : []
 
-                          return (
-                            <tr key={`${prog.id}-${sas.id || sIdx}`}>
+                        return (
+                          <tr key={row.key}>
+                            {span.noSpan > 0 && (
                               <td
-                                className="sticky-no"
+                                rowSpan={span.noSpan}
+                                className="is-merged-cell"
                                 style={{
                                   textAlign: "center",
                                   verticalAlign: "top",
                                   fontWeight: 700,
                                 }}
                               >
-                                {rowCounter}
+                                {span.groupNumber}
                               </td>
-                              {isFirstSas && (
-                                <>
-                                  <td
-                                    rowSpan={totalSasRows}
-                                    style={{ verticalAlign: "top" }}
-                                  >
-                                    {renderEditableCell(
-                                      goalOff >= 0 ? baseIdx + goalOff : -1,
-                                      prog.strategicGoal,
-                                      `Revisi Sasaran Strategis #${pIdx + 1}`,
-                                      { isStrategicGoal: true },
-                                    )}
-                                  </td>
-                                  <td
-                                    rowSpan={totalSasRows}
-                                    className="sticky-program"
-                                    style={{ verticalAlign: "top" }}
-                                  >
-                                    {renderEditableCell(
-                                      baseIdx + progOff,
-                                      prog.program,
-                                      `Revisi Program Kerja #${pIdx + 1}`,
-                                    )}
-                                  </td>
-                                </>
+                            )}
+                            {span.goalSpan > 0 && (
+                              <td
+                                rowSpan={span.goalSpan}
+                                className="is-merged-cell"
+                                style={{ verticalAlign: "top" }}
+                              >
+                                {renderEditableCell(
+                                  coveredGoalIndexes,
+                                  row.strategicGoal,
+                                  `Revisi Sasaran Strategis #${row.rowNumber}`,
+                                  { isStrategicGoal: true, boldText: true },
+                                )}
+                              </td>
+                            )}
+                            {span.programSpan > 0 && (
+                              <td
+                                rowSpan={span.programSpan}
+                                className="is-merged-cell"
+                                style={{ verticalAlign: "top" }}
+                              >
+                                {renderEditableCell(
+                                  coveredProgIndexes,
+                                  row.programName,
+                                  `Revisi Program Kerja #${row.rowNumber}`,
+                                )}
+                              </td>
+                            )}
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.sasaranItemIdx,
+                                sas.target,
+                                `Revisi Sasaran #${row.rowNumber}`,
                               )}
-                              <td style={{ verticalAlign: "top" }}>
-                                {renderEditableCell(
-                                  baseIdx + sasOff,
-                                  sas.target,
-                                  `Revisi Sasaran #${rowCounter}`,
+                            </td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.monthItemIdx,
+                                sas.month,
+                                `Revisi Bulan Pelaksanaan #${row.rowNumber}`,
+                                { centerText: true },
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.stageItemIdx,
+                                sas.stage,
+                                `Revisi Tahap Pelaksanaan #${row.rowNumber}`,
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.realizationItemIdx,
+                                sas.realization,
+                                `Revisi Realisasi Pelaksanaan #${row.rowNumber}`,
+                              )}
+                            </td>
+                            <td
+                              style={{
+                                verticalAlign: "top",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {renderEditableCell(
+                                row.pctItemIdx,
+                                sas.percentage,
+                                `Revisi Realisasi Persen #${row.rowNumber}`,
+                                { centerText: true },
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.obstacleItemIdx,
+                                sas.obstacle,
+                                `Revisi Kendala #${row.rowNumber}`,
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.solutionItemIdx,
+                                sas.solution,
+                                `Revisi Rencana Penyelesaian #${row.rowNumber}`,
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {renderEditableCell(
+                                row.solutionTimeItemIdx,
+                                sas.solutionTime,
+                                `Revisi Waktu Penyelesaian #${row.rowNumber}`,
+                                { centerText: true },
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: "top" }}>
+                              {sas.lateStatus &&
+                                sas.lateStatus !== "Tepat Waktu" && (
+                                  <span
+                                    className={
+                                      sas.lateStatus === "Terlambat"
+                                        ? "late-badge is-overdue"
+                                        : "late-badge is-late-done"
+                                    }
+                                  >
+                                    {sas.lateStatus}
+                                  </span>
                                 )}
-                              </td>
-                              <td style={{ verticalAlign: "top" }}>
-                                {renderEditableCell(
-                                  baseIdx + monthOff,
-                                  sas.month,
-                                  `Revisi Bulan Pelaksanaan #${rowCounter}`,
-                                )}
-                              </td>
-                              <td style={{ verticalAlign: "top" }}>
-                                {renderEditableCell(
-                                  baseIdx + stageOff,
-                                  sas.stage,
-                                  `Revisi Tahap Pelaksanaan #${rowCounter}`,
-                                )}
-                              </td>
-                              <td style={{ verticalAlign: "top" }}>
-                                {renderEditableCell(
-                                  baseIdx + realOff,
-                                  sas.realization,
-                                  `Revisi Realisasi Pelaksanaan #${rowCounter}`,
-                                )}
-                              </td>
-                              <td
-                                style={{
-                                  verticalAlign: "top",
-                                  fontWeight: 700,
-                                }}
-                              >
-                                {renderEditableCell(
-                                  baseIdx + pctOff,
-                                  sas.percentage,
-                                  `Revisi Realisasi Persen #${rowCounter}`,
-                                  { centerText: true },
-                                )}
-                              </td>
-                              <td style={{ verticalAlign: "top" }}>
-                                {renderEditableCell(
-                                  baseIdx + obsOff,
-                                  sas.obstacle,
-                                  `Revisi Kendala #${rowCounter}`,
-                                )}
-                              </td>
-                              <td style={{ verticalAlign: "top" }}>
-                                {renderEditableCell(
-                                  baseIdx + solOff,
-                                  sas.solution,
-                                  `Revisi Rencana Penyelesaian #${rowCounter}`,
-                                )}
-                              </td>
-                              <td style={{ verticalAlign: "top" }}>
-                                {renderEditableCell(
-                                  baseIdx + solTimeOff,
-                                  sas.solutionTime,
-                                  `Revisi Waktu Penyelesaian #${rowCounter}`,
-                                )}
-                              </td>
-                              <td style={{ verticalAlign: "top" }}>
-                                {sas.lateStatus &&
-                                  sas.lateStatus !== "Tepat Waktu" && (
-                                    <span
-                                      className={
-                                        sas.lateStatus === "Terlambat"
-                                          ? "late-badge is-overdue"
-                                          : "late-badge is-late-done"
-                                      }
-                                    >
-                                      {sas.lateStatus}
-                                    </span>
-                                  )}
-                                {renderEditableCell(
-                                  baseIdx + noteOff,
-                                  sas.notes,
-                                  `Revisi Keterangan #${rowCounter}`,
-                                )}
-                              </td>
-                              <td
-                                style={{
-                                  verticalAlign: "top",
-                                  wordBreak: "break-all",
-                                }}
-                              >
-                                {renderEditableCell(
-                                  baseIdx + evOff,
-                                  sas.evidence,
-                                  `Revisi Link Evidence #${rowCounter}`,
-                                  { isLink: true },
-                                )}
-                              </td>
-                            </tr>
-                          )
-                        })
+                              {renderEditableCell(
+                                row.notesItemIdx,
+                                sas.notes,
+                                `Revisi Keterangan #${row.rowNumber}`,
+                              )}
+                            </td>
+                            <td
+                              style={{
+                                verticalAlign: "top",
+                                wordBreak: "break-all",
+                              }}
+                            >
+                              {renderEditableCell(
+                                row.evidenceItemIdx,
+                                sas.evidence,
+                                `Revisi Link Evidence #${row.rowNumber}`,
+                                { isLink: true },
+                              )}
+                            </td>
+                          </tr>
+                        )
                       })}
                     </tbody>
                   </table>
@@ -604,57 +623,30 @@ export function DetailModal({
                   title={revisionLocked ? revisionLockReason : undefined}
                   onClick={onSaveRevision}
                 >
-                  Kirim Perbaikan <Icon name="arrow" size={16} />
+                  Kirim Perbaikan <Icon name="send" size={14} />
                 </button>
               </div>
             </>
-          ) : isAdmin ? (
-            <div className="detail-actions-right">
-              <button
-                type="button"
-                className="secondary-button"
-                onClick={() => onPrintPreview(record)}
-              >
-                <Icon name="report" size={16} /> Cetak
-              </button>
-              {onOpenReview && canReview && (
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => onOpenReview(record)}
-                >
-                  Periksa <Icon name="arrow" size={16} />
-                </button>
-              )}
-            </div>
-          ) : (
+          ) : isDraftPreview ? (
             <>
-              {isDraftPreview ? (
-                <div className="detail-last-modified">
-                  <span>Terakhir diubah:</span>
-                  {updatedAtLabel ? (
+              <span className="detail-draft-note">
+                {updatedAtLabel ? (
+                  <>
+                    Terakhir diubah:{" "}
                     <time dateTime={record.updatedAt}>{updatedAtLabel}</time>
-                  ) : (
-                    <strong>Belum ada perubahan</strong>
-                  )}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={onClose}
-                >
-                  Tutup
-                </button>
-              )}
+                  </>
+                ) : (
+                  "Pratinjau draf sementara"
+                )}
+              </span>
               <div className="detail-actions-right">
-                {!isDraftPreview && onExportExcel && (
+                {onExportExcel && (
                   <button
                     type="button"
                     className="secondary-button"
                     onClick={() => onExportExcel(record)}
                   >
-                    Cetak Excel
+                    Unduh Excel (.xlsx) <Icon name="download" size={15} />
                   </button>
                 )}
                 <button
@@ -664,8 +656,76 @@ export function DetailModal({
                 >
                   {record.type === "Sasaran Kinerja"
                     ? "Cetak Sasaran Kinerja (PDF)"
-                    : "Cetak Laporan Realisasi (PDF)"}{" "}
-                  <Icon name="report" size={16} />
+                    : "Cetak Laporan (PDF)"}{" "}
+                  <Icon name="report" size={15} />
+                </button>
+              </div>
+            </>
+          ) : isAdmin ? (
+            <>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onClose}
+              >
+                Tutup
+              </button>
+              <div className="detail-actions-right">
+                {onExportExcel && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => onExportExcel(record)}
+                  >
+                    Unduh Excel (.xlsx) <Icon name="download" size={15} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => onPrintPreview(record)}
+                >
+                  Cetak PDF <Icon name="report" size={15} />
+                </button>
+                {record.status === "Menunggu" && onOpenReview && canReview && (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => onOpenReview(record)}
+                  >
+                    Periksa & Verifikasi <Icon name="check" size={15} />
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={onClose}
+              >
+                Tutup
+              </button>
+              <div className="detail-actions-right">
+                {onExportExcel && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    onClick={() => onExportExcel(record)}
+                  >
+                    Unduh Excel (.xlsx) <Icon name="download" size={15} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => onPrintPreview(record)}
+                >
+                  {record.type === "Sasaran Kinerja"
+                    ? "Cetak Sasaran Kinerja (PDF)"
+                    : "Cetak Laporan (PDF)"}{" "}
+                  <Icon name="report" size={15} />
                 </button>
               </div>
             </>
@@ -675,4 +735,5 @@ export function DetailModal({
     </div>
   )
 }
+
 export default DetailModal

@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react"
+import { AnimatePresence, MotionConfig, motion } from "motion/react"
 import { confirmNavigation } from "./utils/useUnsavedChanges"
-import { refreshScrollLayout, usePageMotion } from "./utils/useMotion"
+import {
+  refreshScrollLayout,
+  scrollToTarget,
+  usePageMotion,
+  useSmoothScroll,
+} from "./utils/useMotion"
 import { Icon } from "./components/Icon"
 import { Sidebar } from "./components/Sidebar"
 import { Header } from "./components/Header"
@@ -109,7 +115,9 @@ function AppWorkspace({
   const expandBtnRef = useRef<HTMLButtonElement>(null)
   const mountedRef = useRef(false)
   const content = useRef<HTMLDivElement>(null)
-  usePageMotion(content, `${session.userId}:${role}:${active}`)
+  const routeKey = `${session.userId}:${role}:${active}`
+  useSmoothScroll(routeKey)
+  usePageMotion(content, routeKey)
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -427,55 +435,63 @@ function AppWorkspace({
         />
 
         <div className="content" ref={content}>
-          {notice && (
-            <div
-              className={`notice${notice.tone === "error"
-                ? " is-error"
-                : notice.priority === "urgent"
-                  ? " is-urgent"
-                  : notice.priority === "important"
-                    ? " is-important"
-                    : notice.tone === "info"
-                      ? " is-info"
-                      : ""
+          <AnimatePresence mode="wait">
+            {notice && (
+              <motion.div
+                key={notice.message}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className={`notice${
+                  notice.tone === "error"
+                    ? " is-error"
+                    : notice.priority === "urgent"
+                      ? " is-urgent"
+                      : notice.priority === "important"
+                        ? " is-important"
+                        : notice.tone === "info"
+                          ? " is-info"
+                          : ""
                 }`}
-              role={
-                notice.tone === "error" || notice.priority === "urgent"
-                  ? "alert"
-                  : "status"
-              }
-            >
-              <span aria-hidden="true">
-                {notice.tone === "error" || notice.priority === "urgent" ? (
-                  "!"
-                ) : notice.tone === "info" ? (
-                  <Icon name="bell" size={15} />
-                ) : (
-                  <Icon name="check" size={16} />
-                )}
-              </span>
-              <p className="notice-text">{notice.message}</p>
-              <div className="notice-actions">
-                {notice.targetMenu && role === "staff" && (
+                role={
+                  notice.tone === "error" || notice.priority === "urgent"
+                    ? "alert"
+                    : "status"
+                }
+              >
+                <span aria-hidden="true">
+                  {notice.tone === "error" || notice.priority === "urgent" ? (
+                    "!"
+                  ) : notice.tone === "info" ? (
+                    <Icon name="bell" size={15} />
+                  ) : (
+                    <Icon name="check" size={16} />
+                  )}
+                </span>
+                <p className="notice-text">{notice.message}</p>
+                <div className="notice-actions">
+                  {notice.targetMenu && role === "staff" && (
+                    <button
+                      type="button"
+                      className="notice-link-btn"
+                      onClick={() => selectMenu(notice.targetMenu!)}
+                    >
+                      Buka {notice.targetMenu}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    className="notice-link-btn"
-                    onClick={() => selectMenu(notice.targetMenu!)}
+                    className="notice-close-btn"
+                    aria-label="Tutup pemberitahuan"
+                    onClick={() => setNotice(null)}
                   >
-                    Buka {notice.targetMenu}
+                    ×
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="notice-close-btn"
-                  aria-label="Tutup pemberitahuan"
-                  onClick={() => setNotice(null)}
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-          )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {role === "staff" && (
             <StaffReminderBanner
@@ -586,6 +602,7 @@ function AuthGate() {
   const [authView, setAuthView] = useState<"portal" | "login">(
     readInitialAuthView,
   )
+  useSmoothScroll(!session ? `public:${authView}` : undefined)
 
   useEffect(() => {
     const onPopState = () => {
@@ -598,13 +615,13 @@ function AuthGate() {
   const openLogin = () => {
     setAuthView("login")
     syncAuthUrl("login")
-    window.scrollTo({ top: 0 })
+    scrollToTarget(0, { immediate: true })
   }
 
   const openPortal = () => {
     setAuthView("portal")
     syncAuthUrl("portal")
-    window.scrollTo({ top: 0 })
+    scrollToTarget(0, { immediate: true })
   }
 
   if (!session) {
@@ -632,10 +649,12 @@ function AuthGate() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ReportingProvider records={initialHistory}>
-        <AuthGate />
-      </ReportingProvider>
-    </AuthProvider>
+    <MotionConfig reducedMotion="user">
+      <AuthProvider>
+        <ReportingProvider records={initialHistory}>
+          <AuthGate />
+        </ReportingProvider>
+      </AuthProvider>
+    </MotionConfig>
   )
 }

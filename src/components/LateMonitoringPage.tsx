@@ -321,7 +321,7 @@ export function LateMonitoringPage({
           )}
         </div>
 
-        <div className="admin-table-wrap">
+        <div className="admin-table-wrap" data-lenis-prevent>
           <table>
             <thead>
               <tr>
